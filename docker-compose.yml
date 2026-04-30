@@ -1,4 +1,11 @@
 services:
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
 
   backend:
     build: ./backend
@@ -12,14 +19,6 @@ services:
       - redis
       - ml-service
 
-  frontend:
-    build: ./frontend
-    container_name: frontend
-    ports:
-      - "5173:80"
-    depends_on:
-      - backend
-
   ml-service:
     build: ./ml-service
     container_name: ml-service
@@ -32,7 +31,7 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - mongo_data:/data/db
+      - mongo-data:/data/db
 
   redis:
     image: redis:7
@@ -41,4 +40,4 @@ services:
       - "6379:6379"
 
 volumes:
-  mongo_data:
+  mongo-data:

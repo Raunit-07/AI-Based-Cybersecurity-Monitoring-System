@@ -1,4 +1,6 @@
+import connectDB from "./config/db.js";
 import http from "http";
+
 import { Server } from "socket.io";
 import dotenv from "dotenv";
 import app from "./app.js";
@@ -39,6 +41,7 @@ io.on("connection", (socket) => {
     clearInterval(trafficInterval);
   });
 });
+await connectDB();
 
 // ================= START SERVER =================
 server.listen(PORT, () => {

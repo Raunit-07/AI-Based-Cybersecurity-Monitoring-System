@@ -1,11 +1,15 @@
-const express = require('express');
+import express from "express";
 const router = express.Router();
-const logsController = require('../controllers/logs.controller');
-const { logValidator } = require('../validators/log.validator');
-const validate = require('../middlewares/validate.middleware');
-const { authMiddleware } = require('../middlewares/auth.middleware');
 
-router.post('/', logValidator, validate, logsController.ingestLog);
-router.get('/', authMiddleware, logsController.getLogs);
+import logsController from "../controllers/logs.controller.js";
+import { logValidator } from "../validators/log.validator.js";
+import validate from "../middlewares/validate.middleware.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
 
-module.exports = router;
+// 🚨 PUBLIC route (for simulation)
+router.post("/", logValidator, validate, logsController.ingestLog);
+
+// 🔐 Protected route
+router.get("/", authMiddleware, logsController.getLogs);
+
+export default router;

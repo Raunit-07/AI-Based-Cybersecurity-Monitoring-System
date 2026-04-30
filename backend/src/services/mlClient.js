@@ -1,23 +1,34 @@
-const axios = require('axios');
+import axios from "axios";
 
-const detectThreat = async (data) => {
+// ================= ML CLIENT =================
+export const detectThreat = async (data) => {
   try {
+    // ✅ Basic validation safeguard
+    if (!data || !data.ip) {
+      throw new Error("Invalid data for ML detection");
+    }
+
     const response = await axios.post(
       process.env.ML_SERVICE_URL,
-      data
+      {
+        ip: data.ip,
+        requests: data.requests || 0,
+        failedLogins: data.failedLogins || 0,
+      },
+      {
+        timeout: 5000, // ⏱ prevent hanging requests
+      }
     );
 
     return response.data;
   } catch (error) {
-    console.error("ML Error:", error.message);
+    console.error("ML Service Error:", error.message);
 
-    // fallback
+    // ✅ Safe fallback (prevents system crash)
     return {
       is_anomaly: false,
       anomaly_score: 0,
-      attack_type: 'fallback'
+      attack_type: "fallback",
     };
   }
 };
-
-module.exports = { detectThreat };
