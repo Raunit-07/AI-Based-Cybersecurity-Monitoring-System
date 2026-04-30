@@ -38,11 +38,10 @@ app.get("/", (req, res) => {
 });
 
 // 👉 Add your routes here (UNCOMMENT when ready)
-// import authRoutes from "./routes/auth.routes.js";
-// import logRoutes from "./routes/log.routes.js";
+import authRoutes from "./routes/auth.routes.js";// import logRoutes from "./routes/log.routes.js";
 // import alertRoutes from "./routes/alert.routes.js";
 
-// app.use("/api/auth", authRoutes);
+app.use("/api/auth", authRoutes);
 // app.use("/api/logs", logRoutes);
 // app.use("/api/alerts", alertRoutes);
 

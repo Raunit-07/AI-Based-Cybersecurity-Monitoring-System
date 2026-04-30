@@ -1,9 +1,9 @@
-const apiResponse = (res, statusCode, success, data, message = '') => {
-  res.status(statusCode).json({
+const apiResponse = (res, statusCode, success, data, message) => {
+  return res.status(statusCode).json({
     success,
     data,
-    message
+    message,
   });
 };
 
-module.exports = apiResponse;
+export default apiResponse;

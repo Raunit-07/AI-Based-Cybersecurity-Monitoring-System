@@ -1,20 +1,34 @@
-const { body } = require('express-validator');
+import { body } from "express-validator";
 
-const registerValidator = [
-  body('username')
+// ================= REGISTER VALIDATOR =================
+export const registerValidator = [
+  body("username")
     .trim()
-    .isLength({ min: 3, max: 30 }).withMessage('Username must be between 3 and 30 characters')
-    .escape(),
-  body('password')
-    .isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+    .notEmpty()
+    .withMessage("Username is required")
+    .isLength({ min: 3 })
+    .withMessage("Username must be at least 3 characters"),
+
+  body("password")
+    .notEmpty()
+    .withMessage("Password is required")
+    .isLength({ min: 6 })
+    .withMessage("Password must be at least 6 characters"),
+
+  body("role")
+    .optional()
+    .isIn(["user", "admin"])
+    .withMessage("Invalid role"),
 ];
 
-const loginValidator = [
-  body('username').trim().notEmpty().withMessage('Username is required').escape(),
-  body('password').notEmpty().withMessage('Password is required')
-];
+// ================= LOGIN VALIDATOR =================
+export const loginValidator = [
+  body("username")
+    .trim()
+    .notEmpty()
+    .withMessage("Username is required"),
 
-module.exports = {
-  registerValidator,
-  loginValidator
-};
+  body("password")
+    .notEmpty()
+    .withMessage("Password is required"),
+];

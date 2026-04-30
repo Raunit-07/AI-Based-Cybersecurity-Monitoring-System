@@ -1,36 +1,35 @@
-const rateLimit = require('express-rate-limit');
-const RedisStore = require('rate-limit-redis').default;
-const { getRedisClient } = require('../config/redis');
+import rateLimit from "express-rate-limit";
+import RedisStore from "rate-limit-redis";
+import { getRedisClient } from "../config/redis.js";
 
+// ================= HELPER =================
 const createRateLimiter = (options) => {
   const client = getRedisClient();
-  const store = client ? new RedisStore({
-    sendCommand: (...args) => client.sendCommand(args),
-  }) : undefined; // falls back to memory store if undefined
+
+  const store = client
+    ? new RedisStore({
+        sendCommand: (...args) => client.sendCommand(args),
+      })
+    : undefined; // fallback to memory store
 
   return rateLimit({
     store,
-    ...options
+    standardHeaders: true,
+    legacyHeaders: false,
+    ...options,
   });
 };
 
-const globalLimiter = createRateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per `window`
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Too many requests from this IP, please try again after 15 minutes'
-});
-
-const authLimiter = createRateLimiter({
+// ================= GLOBAL LIMITER =================
+export const globalLimiter = createRateLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 50, // Limit each IP to 50 login requests per `window`
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: 'Too many auth attempts from this IP, please try again after 15 minutes'
+  max: 1000,
+  message: "Too many requests, try again later",
 });
 
-module.exports = {
-  globalLimiter,
-  authLimiter
-};
+// ================= AUTH LIMITER =================
+export const authLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 50,
+  message: "Too many login attempts, try again later",
+});

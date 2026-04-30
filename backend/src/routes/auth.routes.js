@@ -1,10 +1,11 @@
-const express = require('express');
+import express from "express";
+import authController from "../controllers/auth.controller.js";
+import { registerValidator, loginValidator } from "../validators/auth.validator.js";
+import validate from "../middlewares/validate.middleware.js";
+import { authLimiter } from "../middlewares/rateLimiter.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+
 const router = express.Router();
-const authController = require('../controllers/auth.controller');
-const { registerValidator, loginValidator } = require('../validators/auth.validator');
-const validate = require('../middlewares/validate.middleware');
-const { authLimiter } = require('../middlewares/rateLimiter');
-const { authMiddleware } = require('../middlewares/auth.middleware');
 
 router.post('/register', authLimiter, registerValidator, validate, authController.register);
 router.post('/login', authLimiter, loginValidator, validate, authController.login);
@@ -12,4 +13,4 @@ router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', authMiddleware, authController.logout);
 router.get('/me', authMiddleware, authController.getMe);
 
-module.exports = router;
+export default router;

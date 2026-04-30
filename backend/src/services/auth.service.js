@@ -1,49 +1,55 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+import jwt from "jsonwebtoken";
+import User from "../models/User.js";
 
+// ================= TOKEN GENERATION =================
 const generateTokens = (userId, role) => {
   const payload = { id: userId, role };
-  
+
   const accessToken = jwt.sign(
     payload,
-    process.env.JWT_ACCESS_SECRET || 'secret',
-    { expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || '15m' }
+    process.env.JWT_ACCESS_SECRET,
+    { expiresIn: process.env.JWT_ACCESS_EXPIRES_IN || "15m" }
   );
-  
+
   const refreshToken = jwt.sign(
     payload,
-    process.env.JWT_REFRESH_SECRET || 'refresh_secret',
-    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
+    process.env.JWT_REFRESH_SECRET,
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || "7d" }
   );
 
   return { accessToken, refreshToken };
 };
 
-const registerUser = async (username, password, role) => {
+// ================= REGISTER =================
+const registerUser = async (username, password, role = "user") => {
   const existingUser = await User.findOne({ username });
+
   if (existingUser) {
-    const error = new Error('Username already exists');
-    error.statusCode = 400;
+    const error = new Error("Username already exists");
+    error.status = 400;
     throw error;
   }
-  
+
   const user = new User({ username, password, role });
   await user.save();
+
   return user;
 };
 
+// ================= LOGIN =================
 const loginUser = async (username, password) => {
-  const user = await User.findOne({ username });
+const user = await User.findOne({ username }).select("+password +refreshToken");
   if (!user) {
-    const error = new Error('Invalid credentials');
-    error.statusCode = 401;
+    const error = new Error("Invalid credentials");
+    error.status = 401;
     throw error;
   }
 
   const isMatch = await user.comparePassword(password);
+
   if (!isMatch) {
-    const error = new Error('Invalid credentials');
-    error.statusCode = 401;
+    const error = new Error("Invalid credentials");
+    error.status = 401;
     throw error;
   }
 
@@ -55,37 +61,50 @@ const loginUser = async (username, password) => {
   return { user, accessToken, refreshToken };
 };
 
+// ================= REFRESH TOKEN =================
 const refreshAuthToken = async (token) => {
   if (!token) {
-    const error = new Error('No refresh token provided');
-    error.statusCode = 401;
+    const error = new Error("No refresh token provided");
+    error.status = 401;
     throw error;
   }
 
-  const decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET || 'refresh_secret');
+  let decoded;
+
+  try {
+    decoded = jwt.verify(token, process.env.JWT_REFRESH_SECRET);
+  } catch {
+    const error = new Error("Invalid refresh token");
+    error.status = 403;
+    throw error;
+  }
+
   const user = await User.findById(decoded.id);
 
   if (!user || user.refreshToken !== token) {
-    const error = new Error('Invalid refresh token');
-    error.statusCode = 403;
+    const error = new Error("Invalid refresh token");
+    error.status = 403;
     throw error;
   }
 
-  const { accessToken, refreshToken: newRefreshToken } = generateTokens(user._id, user.role);
-  
+  const { accessToken, refreshToken: newRefreshToken } =
+    generateTokens(user._id, user.role);
+
   user.refreshToken = newRefreshToken;
   await user.save();
 
   return { accessToken, refreshToken: newRefreshToken };
 };
 
+// ================= LOGOUT =================
 const logoutUser = async (userId) => {
   await User.findByIdAndUpdate(userId, { refreshToken: null });
 };
 
-module.exports = {
+// ================= EXPORT =================
+export default {
   registerUser,
   loginUser,
   refreshAuthToken,
-  logoutUser
+  logoutUser,
 };
