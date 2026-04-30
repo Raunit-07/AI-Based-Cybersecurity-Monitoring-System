@@ -1,16 +1,13 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "AI Threat Detection Backend",
+  "main": "src/server.js",
+  "type": "module",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "axios": "^1.15.2",
     "bcrypt": "^6.0.0",
@@ -28,7 +25,8 @@
     "redis": "^5.12.1",
     "socket.io": "^4.8.3",
     "winston": "^3.19.0",
-    "xss-clean": "^0.1.4"
+    "xss-clean": "^0.1.4",
+    "express-mongo-sanitize": "^2.2.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

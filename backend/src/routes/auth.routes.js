@@ -10,5 +10,6 @@ router.post('/register', authLimiter, registerValidator, validate, authControlle
 router.post('/login', authLimiter, loginValidator, validate, authController.login);
 router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', authMiddleware, authController.logout);
+router.get('/me', authMiddleware, authController.getMe);
 
 module.exports = router;

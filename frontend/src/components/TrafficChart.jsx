@@ -18,7 +18,7 @@ export const TrafficChart = ({ data }) => {
         </div>
       </div>
       
-      <div className="h-[300px] w-full">
+      <div style={{ width: '100%', height: '300px', minHeight: 300 }}>
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>

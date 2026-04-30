@@ -6,18 +6,17 @@ let io;
 const initSockets = (server) => {
   io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : ['http://localhost:5173', 'http://127.0.0.1:5173'],
+      origin: process.env.FRONTEND_URL
+        ? [process.env.FRONTEND_URL]
+        : ['http://localhost:5173', 'http://127.0.0.1:5173'],
       methods: ['GET', 'POST'],
       credentials: true
     }
   });
 
   io.on('connection', (socket) => {
-    logger.info(`Client connected to Socket.IO: ${socket.id}`);
+    logger.info(`⚡ Client connected: ${socket.id}`);
 
-    // Optionally join rooms based on auth token here if needed
-
-    // Emulate traffic updates
     const trafficInterval = setInterval(() => {
       socket.emit('traffic_update', {
         time: new Date().toLocaleTimeString(),
@@ -27,25 +26,31 @@ const initSockets = (server) => {
     }, 2000);
 
     socket.on('disconnect', () => {
-      logger.info(`Client disconnected: ${socket.id}`);
+      logger.info(`❌ Client disconnected: ${socket.id}`);
       clearInterval(trafficInterval);
     });
   });
+
+  return io;
 };
 
+// ✅ FIXED emitAlert
 const emitAlert = (alert) => {
-  if (io) {
-    // Map to the frontend expected format
-    const formattedAlert = {
-      id: alert._id,
-      type: alert.type,
-      severity: alert.severity,
-      source: alert.source,
-      time: alert.createdAt.toISOString(),
-      status: alert.status
-    };
-    io.emit('new_alert', formattedAlert);
+  if (!io) {
+    logger.error('❌ Socket.IO not initialized');
+    return;
   }
+
+  const formattedAlert = {
+    id: alert._id,
+    type: alert.type,
+    severity: alert.severity,
+    source: alert.source || 'system',
+    time: alert.createdAt ? alert.createdAt.toISOString() : new Date().toISOString(),
+    status: alert.status || 'active'
+  };
+
+  io.emit('new-alert', formattedAlert);
 };
 
 module.exports = { initSockets, emitAlert };

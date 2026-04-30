@@ -6,6 +6,8 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { Login } from './pages/Login';
 
+import { ErrorBoundary } from './components/ErrorBoundary';
+
 // Lazy loaded pages
 const Dashboard = React.lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
 const Alerts = React.lazy(() => import('./pages/Alerts').then(module => ({ default: module.Alerts })));
@@ -33,14 +35,18 @@ function App() {
               </ProtectedRoute>
             }>
               <Route index element={
-                <Suspense fallback={<PageLoader />}>
-                  <Dashboard />
-                </Suspense>
+                <ErrorBoundary>
+                  <Suspense fallback={<PageLoader />}>
+                    <Dashboard />
+                  </Suspense>
+                </ErrorBoundary>
               } />
               <Route path="alerts" element={
-                <Suspense fallback={<PageLoader />}>
-                  <Alerts />
-                </Suspense>
+                <ErrorBoundary>
+                  <Suspense fallback={<PageLoader />}>
+                    <Alerts />
+                  </Suspense>
+                </ErrorBoundary>
               } />
             </Route>
 

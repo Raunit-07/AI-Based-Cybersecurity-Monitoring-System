@@ -6,10 +6,13 @@ import { useAlerts, useSuspiciousIPs } from '../hooks/useThreatData';
 import { useLiveTraffic } from '../hooks/useLiveTraffic';
 import { Shield, AlertTriangle, Activity, Database } from 'lucide-react';
 
+
 export const Dashboard = () => {
   const { data: alerts, isLoading: isLoadingAlerts } = useAlerts();
   const { data: ips, isLoading: isLoadingIPs } = useSuspiciousIPs();
   const { trafficData, isConnected } = useLiveTraffic();
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const filtered = safeAlerts.filter(a => a.status === 'active' && (a.severity === 'critical' || a.severity === 'high')); 
 
   const activeThreats = alerts?.filter(a => a.status === 'active').length || 0;
   const criticalAlerts = alerts?.filter(a => a.severity === 'critical' || a.severity === 'high').length || 0;

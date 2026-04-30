@@ -1,49 +1,71 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+
 from app.core.config import settings
 from app.core.security import limiter
 from app.api.endpoints import router as api_router
 from app.models.isolation_forest import model_manager
 from app.utils.logger import logger
+
 import os
 
+# ================= INIT APP =================
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="High-performance anomaly detection microservice",
     version="1.0.0",
-    docs_url="/docs" if settings.DEBUG_MODE else None,
-    redoc_url="/redoc" if settings.DEBUG_MODE else None,
+    docs_url="/docs",        # ALWAYS ENABLE (important for debugging)
+    redoc_url="/redoc"
 )
 
-# CORS
+# ================= CORS =================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Should be restricted in production
+    allow_origins=["*"],  # restrict in production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Rate Limiting
+# ================= RATE LIMIT =================
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# Include Routers
+# ================= ROUTES =================
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+# ================= ROOT ROUTE =================
+@app.get("/")
+def root():
+    return {"message": "ML Service Running ✅"}
+
+# ================= HEALTH CHECK =================
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+# ================= STARTUP =================
 @app.on_event("startup")
 async def startup_event():
-    logger.info("Starting up Anomaly Detection Service...")
-    # Change working directory context if needed, but model path is relative
-    try:
-        model_manager.load_model()
-    except Exception as e:
-        logger.error(f"Failed to load model during startup: {e}")
-        # Not exiting here so the app can still boot, but requests will fail.
-        # In strict environments, you might want to `import sys; sys.exit(1)`
+    logger.info("🚀 Starting Anomaly Detection Service...")
 
+    try:
+        # Ensure correct working directory
+        model_path = "artifacts/model.joblib"
+
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found at {model_path}")
+
+        model_manager.load_model()
+        logger.info("✅ Model loaded successfully")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to load model: {e}")
+        # Don't crash service — but log clearly
+
+# ================= SHUTDOWN =================
 @app.on_event("shutdown")
 async def shutdown_event():
-    logger.info("Shutting down Anomaly Detection Service...")
+    logger.info("🛑 Shutting down Anomaly Detection Service...")

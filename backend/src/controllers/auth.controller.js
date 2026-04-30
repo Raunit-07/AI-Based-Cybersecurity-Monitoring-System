@@ -58,9 +58,17 @@ const logout = catchAsync(async (req, res) => {
   apiResponse(res, 200, true, {}, 'Logged out successfully');
 });
 
+const getMe = catchAsync(async (req, res) => {
+  if (!req.user) {
+    return apiResponse(res, 401, false, null, 'Not authenticated');
+  }
+  apiResponse(res, 200, true, { user: req.user }, 'Current user');
+});
+
 module.exports = {
   register,
   login,
   refreshToken,
-  logout
+  logout,
+  getMe
 };

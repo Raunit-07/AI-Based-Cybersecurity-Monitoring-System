@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { Shield, Lock, User } from 'lucide-react';
 
 export const Login = () => {
+  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('password');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, register } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
@@ -17,10 +18,17 @@ export const Login = () => {
     setIsLoading(true);
 
     try {
-      await login(username, password);
-      navigate('/');
+      if (isLogin) {
+        await login(username, password);
+        navigate('/');
+      } else {
+        await register(username, password);
+        // auto-login after successful registration
+        await login(username, password);
+        navigate('/');
+      }
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to login');
+      setError(err.response?.data?.error || `Failed to ${isLogin ? 'login' : 'register'}`);
     } finally {
       setIsLoading(false);
     }
@@ -38,7 +46,7 @@ export const Login = () => {
             <Shield className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-2xl font-bold tracking-wider">THREAT<span className="text-primary">OPS</span></h1>
-          <p className="text-gray-400 mt-2 text-sm">Sign in to access the dashboard</p>
+          <p className="text-gray-400 mt-2 text-sm">{isLogin ? 'Sign in to access the dashboard' : 'Create an account'}</p>
         </div>
 
         {error && (
@@ -87,9 +95,22 @@ export const Login = () => {
             disabled={isLoading}
             className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
           >
-            {isLoading ? 'Signing in...' : 'Sign in'}
+            {isLoading ? (isLogin ? 'Signing in...' : 'Registering...') : (isLogin ? 'Sign in' : 'Register')}
           </button>
         </form>
+        
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError('');
+            }}
+            className="text-sm text-primary hover:text-primary/80 transition-colors"
+          >
+            {isLogin ? "Don't have an account? Register" : "Already have an account? Sign in"}
+          </button>
+        </div>
       </div>
     </div>
   );

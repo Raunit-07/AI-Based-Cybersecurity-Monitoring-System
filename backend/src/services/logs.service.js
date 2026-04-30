@@ -1,50 +1,49 @@
-const Log = require('../models/Log');
+const Log = require('../models/log.model');
 const { analyzeThreat } = require('../integrations/mlClient');
 const alertsService = require('./alerts.service');
 const { emitAlert } = require('../sockets');
+const Alert = require('../models/alert.model');
+const { detectThreat } = require('./mlClient');
 
-const processLog = async (logData) => {
-  // 1. Analyze threat via ML/Fallback
-  const analysis = await analyzeThreat(logData);
-  
-  // 2. Save log
-  const log = new Log({
-    ...logData,
-    ...analysis
+const processLog = async (logData, io) => {
+  // 1. Save log
+  const log = await Log.create(logData);
+
+  // 2. Send data to ML
+  const mlResult = await detectThreat({
+    ip: log.ip,
+    requests: log.requests,
+    failedLogins: log.failedLogins
   });
-  await log.save();
 
-  // 3. Check threshold and generate alert if necessary
-  if (analysis.anomalyScore > 70) {
-    const severity = analysis.anomalyScore > 90 ? 'critical' : (analysis.anomalyScore > 80 ? 'high' : 'medium');
-    
-    const alert = await alertsService.createAlert({
-      type: analysis.classification,
-      severity,
-      source: log.sourceIp,
-      logReference: log._id,
-      details: logData
+  let alert = null;
+
+  // 3. If anomaly detected
+  if (mlResult.is_anomaly) {
+    alert = await Alert.create({
+      ip: log.ip,
+      type: mlResult.attack_type || 'unknown',
+      severity: mlResult.anomaly_score > 0.8 ? 'critical' : 'high'
     });
 
-    // 4. Emit real-time alert via Socket.IO
-    emitAlert(alert);
+    // 4. Emit real-time alert
+    if (io) {
+      io.emit('new-alert', alert);
+    }
   }
 
-  return log;
-};
+  // 5. Emit traffic update
+  if (io) {
+    io.emit('traffic_update', {
+      ip: log.ip,
+      requests: log.requests,
+      timestamp: Date.now()
+    });
+  }
 
-const getLogs = async (query = {}, options = { limit: 100, skip: 0 }) => {
-  const logs = await Log.find(query)
-    .sort({ createdAt: -1 })
-    .skip(options.skip)
-    .limit(options.limit);
-    
-  const total = await Log.countDocuments(query);
-  
-  return { logs, total };
-};
-
-module.exports = {
-  processLog,
-  getLogs
+  return {
+    log,
+    mlResult,
+    alert
+  };
 };

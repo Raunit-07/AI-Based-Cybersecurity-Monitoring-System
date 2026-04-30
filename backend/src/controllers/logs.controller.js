@@ -3,8 +3,15 @@ const catchAsync = require('../utils/catchAsync');
 const apiResponse = require('../utils/apiResponse');
 
 const ingestLog = catchAsync(async (req, res) => {
-  const log = await logsService.processLog(req.body);
-  apiResponse(res, 201, true, { log }, 'Log ingested and processed');
+  const result = await logsService.processLog(req.body, req.io);
+
+  apiResponse(
+    res,
+    201,
+    true,
+    result,
+    'Log ingested, analyzed, and processed'
+  );
 });
 
 const getLogs = catchAsync(async (req, res) => {

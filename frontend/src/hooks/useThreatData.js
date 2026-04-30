@@ -6,7 +6,7 @@ export const useAlerts = () => {
     queryKey: ['alerts'],
     queryFn: async () => {
       const { data } = await api.get('/alerts');
-      return data;
+      return data?.data?.alerts || data || [];
     },
     staleTime: 60000, // 1 minute
   });
@@ -17,7 +17,7 @@ export const useSuspiciousIPs = () => {
     queryKey: ['ips'],
     queryFn: async () => {
       const { data } = await api.get('/ips');
-      return data;
+      return data?.data?.ips || data || [];
     },
     staleTime: 60000,
   });
