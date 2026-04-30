@@ -1,40 +1,40 @@
-const nodemailer = require('nodemailer');
-const logger = require('../utils/logger');
+import nodemailer from "nodemailer";
 
-const sendEmailAlert = async (alert) => {
-  const host = process.env.EMAIL_HOST;
-  const port = process.env.EMAIL_PORT;
-  const user = process.env.EMAIL_USER;
-  const pass = process.env.EMAIL_PASS;
-  const from = process.env.EMAIL_FROM;
+// ================= MAIL TRANSPORT =================
+const transporter = nodemailer.createTransport({
+  host: process.env.EMAIL_HOST || "smtp.gmail.com",
+  port: process.env.EMAIL_PORT || 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
-  if (!host || !user || !pass) {
-    logger.debug('Email service not fully configured, skipping email alert.');
-    return;
-  }
-
-  const transporter = nodemailer.createTransport({
-    host,
-    port,
-    auth: {
-      user,
-      pass
-    }
-  });
-
-  const mailOptions = {
-    from,
-    to: 'admin@threatops.com', // In production, this might be a list or fetched from config
-    subject: `🚨 ${alert.severity.toUpperCase()} Alert: ${alert.type}`,
-    text: `Threat Detection Alert\n\nType: ${alert.type}\nSeverity: ${alert.severity}\nSource: ${alert.source}\nTime: ${new Date().toISOString()}\n\nDetails: ${JSON.stringify(alert.details, null, 2)}`
-  };
-
+// ================= SEND EMAIL =================
+export const sendEmailAlert = async (alert) => {
   try {
-    await transporter.sendMail(mailOptions);
-    logger.info(`Email alert sent for ${alert.type} from ${alert.source}`);
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      console.warn("⚠️ Email config missing — skipping email alert");
+      return;
+    }
+
+    await transporter.sendMail({
+      from: `"ThreatOps" <${process.env.EMAIL_USER}>`,
+      to: process.env.ALERT_EMAIL || process.env.EMAIL_USER,
+      subject: `🚨 Security Alert (${alert.severity})`,
+      text: `
+Alert Detected:
+
+IP: ${alert.ip}
+Type: ${alert.type}
+Severity: ${alert.severity}
+Time: ${alert.timestamp}
+      `,
+    });
+
+    console.log("📧 Email alert sent");
   } catch (error) {
-    logger.error(`Failed to send email alert: ${error.message}`);
+    console.error("Email error:", error.message);
   }
 };
-
-module.exports = { sendEmailAlert };

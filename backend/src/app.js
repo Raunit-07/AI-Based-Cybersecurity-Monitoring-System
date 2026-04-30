@@ -5,6 +5,8 @@ import cookieParser from "cookie-parser";
 
 import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
+import alertRoutes from "./routes/alerts.routes.js";
+
 
 const app = express();
 
@@ -41,6 +43,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/logs", logsRoutes);
+app.use("/api/alerts", alertRoutes);
 
 // ================= DEBUG ROUTE =================
 app.get("/test", (req, res) => {

@@ -1,47 +1,50 @@
-const alertsService = require('../services/alerts.service');
-const catchAsync = require('../utils/catchAsync');
-const apiResponse = require('../utils/apiResponse');
+import alertsService from "../services/alerts.service.js";
+import catchAsync from "../utils/catchAsync.js";
+import apiResponse from "../utils/apiResponse.js";
 
+// ================= GET ALERTS =================
 const getAlerts = catchAsync(async (req, res) => {
-  const limit = parseInt(req.query.limit, 10) || 50;
+  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
   const skip = parseInt(req.query.skip, 10) || 0;
-  
-  // To keep compatibility with frontend `/api/alerts` which expects an array,
-  // we'll return both our standard wrapper and map it.
-  // Wait, if frontend expects just an array, maybe we should return it directly on the alias route.
-  // For the standard API, we use the standard wrapper.
-  
+
   const { alerts, total } = await alertsService.getAlerts({}, { limit, skip });
-  
-  // Format for frontend compatibility: the frontend mock was returning an array of objects
-  const formattedAlerts = alerts.map(a => ({
+
+  // ✅ SAFE FORMAT (frontend compatible)
+  const formattedAlerts = alerts.map((a) => ({
     id: a._id,
-    type: a.type,
-    severity: a.severity,
-    source: a.source,
-    time: a.createdAt.toISOString(),
-    status: a.status
+    type: a.type || "unknown",
+    severity: a.severity || "low",
+    source: a.ip || "system", // 🔥 FIX: use ip instead of missing field
+    time: a.createdAt?.toISOString() || new Date().toISOString(),
+    status: "active", // 🔥 FIX: your DB has no status → force active
   }));
-  
-  // For standard API route
-  apiResponse(res, 200, true, { alerts: formattedAlerts, total, limit, skip }, 'Alerts fetched successfully');
+
+  apiResponse(
+    res,
+    200,
+    true,
+    { alerts: formattedAlerts, total, limit, skip },
+    "Alerts fetched successfully"
+  );
 });
 
-// Alias for frontend backward compatibility
+// ================= LEGACY ROUTE =================
 const getAlertsLegacy = catchAsync(async (req, res) => {
   const { alerts } = await alertsService.getAlerts({}, { limit: 50, skip: 0 });
-  const formattedAlerts = alerts.map(a => ({
+
+  const formattedAlerts = alerts.map((a) => ({
     id: a._id,
-    type: a.type,
-    severity: a.severity,
-    source: a.source,
-    time: a.createdAt.toISOString(),
-    status: a.status
+    type: a.type || "unknown",
+    severity: a.severity || "low",
+    source: a.ip || "system",
+    time: a.createdAt?.toISOString() || new Date().toISOString(),
+    status: "active",
   }));
+
   res.json(formattedAlerts);
 });
 
-module.exports = {
+export default {
   getAlerts,
-  getAlertsLegacy
+  getAlertsLegacy,
 };

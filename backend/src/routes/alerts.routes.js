@@ -1,8 +1,10 @@
-const express = require('express');
+import express from "express";
+import alertsController from "../controllers/alerts.controller.js";
+import { authMiddleware } from "../middlewares/auth.middleware.js";
+
 const router = express.Router();
-const alertsController = require('../controllers/alerts.controller');
-const { authMiddleware } = require('../middlewares/auth.middleware');
 
-router.get('/', authMiddleware, alertsController.getAlerts);
+// GET all alerts
+router.get("/", authMiddleware, alertsController.getAlerts);
 
-module.exports = router;
+export default router;

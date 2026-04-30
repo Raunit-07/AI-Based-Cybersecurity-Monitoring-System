@@ -22,9 +22,9 @@ async def predict(request: Request, payload: PredictionRequest):
         result = run_prediction_pipeline(payload)
 
         return PredictionResponse(
-            success=True,
-            data=result,
-            message="Prediction successful"
+        success=True,
+        data=result,   # ✅ now correct
+        message="Prediction successful"
         )
 
     except Exception as e:

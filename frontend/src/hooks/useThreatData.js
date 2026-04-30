@@ -1,24 +1,55 @@
-import { useQuery } from '@tanstack/react-query';
-import api from '../services/api';
+import { useQuery } from "@tanstack/react-query";
+import api from "../services/api";
 
+// ================= ALERTS =================
 export const useAlerts = () => {
   return useQuery({
-    queryKey: ['alerts'],
+    queryKey: ["alerts"],
+
     queryFn: async () => {
-      const { data } = await api.get('/alerts');
-      return data?.data?.alerts || data || [];
+      const res = await api.get("/alerts");
+
+      // ✅ Normalize response safely
+      const alerts =
+        res?.data?.data?.alerts ||   // preferred backend format
+        res?.data?.alerts ||         // fallback
+        [];
+
+      return Array.isArray(alerts) ? alerts : [];
     },
-    staleTime: 60000, // 1 minute
+
+    staleTime: 60000,
+
+    // ✅ Prevent UI crash
+    retry: 2,
+
+    onError: (error) => {
+      console.error("Error fetching alerts:", error.message);
+    },
   });
 };
 
+// ================= SUSPICIOUS IPS =================
 export const useSuspiciousIPs = () => {
   return useQuery({
-    queryKey: ['ips'],
+    queryKey: ["ips"],
+
     queryFn: async () => {
-      const { data } = await api.get('/ips');
-      return data?.data?.ips || data || [];
+      const res = await api.get("/ips");
+
+      const ips =
+        res?.data?.data?.ips ||
+        res?.data?.ips ||
+        [];
+
+      return Array.isArray(ips) ? ips : [];
     },
+
     staleTime: 60000,
+    retry: 2,
+
+    onError: (error) => {
+      console.error("Error fetching IPs:", error.message);
+    },
   });
 };

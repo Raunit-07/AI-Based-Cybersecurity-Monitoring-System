@@ -1,32 +1,50 @@
-const Alert = require('../models/Alert');
-const { sendSlackAlert } = require('../integrations/slack');
-const { sendEmailAlert } = require('../integrations/email');
+import Alert from "../models/alert.model.js";
+import { sendSlackAlert } from "../integrations/slack.js";
+import { sendEmailAlert } from "../integrations/email.js";
 
+// ================= CREATE ALERT =================
 const createAlert = async (alertData) => {
-  const alert = new Alert(alertData);
-  await alert.save();
+  if (!alertData || !alertData.ip) {
+    throw new Error("Invalid alert data");
+  }
 
-  // Trigger integrations for high/critical severities
-  if (alert.severity === 'high' || alert.severity === 'critical') {
-    await sendSlackAlert(alert);
-    await sendEmailAlert(alert);
+  const alert = await Alert.create({
+    ip: alertData.ip,
+    type: alertData.type || "unknown",
+    severity: alertData.severity || "low",
+    timestamp: alertData.timestamp || new Date(),
+  });
+
+  // ✅ Trigger integrations ONLY for high severity
+  if (["high", "critical"].includes(alert.severity)) {
+    try {
+      await sendSlackAlert(alert);
+      await sendEmailAlert(alert);
+    } catch (err) {
+      console.error("Alert integration error:", err.message);
+    }
   }
 
   return alert;
 };
 
-const getAlerts = async (query = {}, options = { limit: 50, skip: 0 }) => {
+// ================= GET ALERTS =================
+const getAlerts = async (query = {}, options = {}) => {
+  const limit = Math.min(options.limit || 50, 100);
+  const skip = options.skip || 0;
+
   const alerts = await Alert.find(query)
     .sort({ createdAt: -1 })
-    .skip(options.skip)
-    .limit(options.limit);
-    
+    .skip(skip)
+    .limit(limit)
+    .lean(); // ✅ performance optimization
+
   const total = await Alert.countDocuments(query);
-  
+
   return { alerts, total };
 };
 
-module.exports = {
+export default {
   createAlert,
-  getAlerts
+  getAlerts,
 };

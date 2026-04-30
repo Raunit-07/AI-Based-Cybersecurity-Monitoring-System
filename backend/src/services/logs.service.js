@@ -5,7 +5,7 @@ import { detectThreat } from "./mlClient.js";
 // ================= PROCESS LOG =================
 const processLog = async (logData, io) => {
   try {
-    // ✅ Basic validation safeguard
+    // ✅ Validation
     if (!logData || !logData.ip) {
       throw new Error("Invalid log data");
     }
@@ -22,36 +22,51 @@ const processLog = async (logData, io) => {
     });
 
     // ================= ML DETECTION =================
-    let mlResult = {
-      is_anomaly: false,
-      anomaly_score: 0,
-      attack_type: "normal",
-    };
+    let mlRaw = null;
 
     try {
-      mlResult = await detectThreat({
+      mlRaw = await detectThreat({
         ip: log.ip,
         requests: log.requests,
         failedLogins: log.failedLogins,
       });
+
+      console.log("ML RESULT:", mlRaw);
     } catch (error) {
       console.error("ML Error:", error.message);
-      // fallback keeps system running
     }
+
+    // ================= NORMALIZE ML =================
+    const mlData = mlRaw?.data || {};
+
+    // 🔥 HYBRID DETECTION (IMPORTANT)
+    const isAnomaly =
+      mlData.is_anomaly === true ||
+      mlData.anomaly_score > 0.6 ||
+      log.requests > 800 ||          // DDoS rule
+      log.failedLogins > 10;         // Brute-force rule
+
+    const anomalyScore = mlData.anomaly_score || 0;
+
+    const attackType =
+      log.failedLogins > 10
+        ? "bruteforce"
+        : log.requests > 800
+        ? "ddos"
+        : mlData.attack_type || "suspicious";
 
     let alert = null;
 
-    // ================= ALERT GENERATION =================
-    if (mlResult.is_anomaly) {
+    // ================= ALERT CREATION =================
+    if (isAnomaly) {
       alert = await Alert.create({
         ip: log.ip,
-        type: mlResult.attack_type || "suspicious",
-        severity:
-          mlResult.anomaly_score > 0.8 ? "critical" : "high",
+        type: attackType,
+        severity: anomalyScore > 0.8 ? "critical" : "high",
         timestamp: new Date(),
       });
 
-      // 🔥 Emit real-time alert
+      // 🔥 Real-time emit
       if (io) {
         io.emit("new-alert", alert);
       }
@@ -68,7 +83,11 @@ const processLog = async (logData, io) => {
 
     return {
       log,
-      mlResult,
+      mlResult: {
+        is_anomaly: isAnomaly,
+        anomaly_score: anomalyScore,
+        attack_type: attackType,
+      },
       alert,
     };
   } catch (error) {

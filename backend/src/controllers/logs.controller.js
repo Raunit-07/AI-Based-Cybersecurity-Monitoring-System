@@ -1,8 +1,6 @@
 import logsService from "../services/logs.service.js";
 import catchAsync from "../utils/catchAsync.js";
 import apiResponse from "../utils/apiResponse.js";
-import Log from "../models/log.model.js";
-import axios from "axios";
 
 // ================= INGEST LOG =================
 const ingestLog = catchAsync(async (req, res) => {
@@ -13,40 +11,22 @@ const ingestLog = catchAsync(async (req, res) => {
     return apiResponse(res, 400, false, null, "Invalid log data");
   }
 
-  // ✅ Save log
-  const log = await Log.create(logData);
+  const io = req.app.get("io");
 
-  // ================= ML DETECTION =================
-  let mlResult = null;
+  // ✅ Use service (IMPORTANT - single source of truth)
+  const result = await logsService.processLog(logData, io);
 
-  try {
-    const response = await axios.post(process.env.ML_SERVICE_URL, {
-      ip: log.ip,
-      requests: log.requests,
-      failedLogins: log.failedLogins || 0,
-    });
-
-    mlResult = response.data;
-  } catch (error) {
-    console.error("ML Service Error:", error.message);
-  }
-
-  // ================= ALERT =================
-  if (mlResult && mlResult.is_anomaly) {
-    const alert = {
-      ip: log.ip,
-      type: mlResult.attack_type || "suspicious",
-      severity: "high",
-      timestamp: new Date(),
-    };
-
-    const io = req.app.get("io");
-    if (io) {
-      io.emit("new-alert", alert);
-    }
-  }
-
-  apiResponse(res, 201, true, { log }, "Log stored successfully");
+  return apiResponse(
+    res,
+    201,
+    true,
+    {
+      log: result.log,
+      alert: result.alert || null,
+      ml: result.mlResult,
+    },
+    "Log processed successfully"
+  );
 });
 
 // ================= GET LOGS =================
