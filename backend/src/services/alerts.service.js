@@ -8,20 +8,26 @@ const createAlert = async (alertData) => {
     throw new Error("Invalid alert data");
   }
 
+  // basic sanitization
+  const ip = String(alertData.ip).trim();
+
   const alert = await Alert.create({
-    ip: alertData.ip,
+    ip,
     type: alertData.type || "unknown",
     severity: alertData.severity || "low",
     timestamp: alertData.timestamp || new Date(),
   });
 
-  // ✅ Trigger integrations ONLY for high severity
+  // Trigger integrations only for higher severity
   if (["high", "critical"].includes(alert.severity)) {
     try {
-      await sendSlackAlert(alert);
-      await sendEmailAlert(alert);
+      await Promise.all([
+        sendSlackAlert(alert),
+        sendEmailAlert(alert),
+      ]);
     } catch (err) {
-      console.error("Alert integration error:", err.message);
+      console.error("⚠️ Alert integration error:", err.message);
+      // do NOT throw — alert already created
     }
   }
 
@@ -30,21 +36,19 @@ const createAlert = async (alertData) => {
 
 // ================= GET ALERTS =================
 const getAlerts = async (query = {}, options = {}) => {
-  const limit = Math.min(options.limit || 50, 100);
-  const skip = options.skip || 0;
+  const limit = Math.min(Number(options.limit) || 50, 100);
+  const skip = Number(options.skip) || 0;
 
   const alerts = await Alert.find(query)
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
-    .lean(); // ✅ performance optimization
+    .lean();
 
   const total = await Alert.countDocuments(query);
 
   return { alerts, total };
 };
 
-export default {
-  createAlert,
-  getAlerts,
-};
+// ✅ NAMED EXPORTS
+export { createAlert, getAlerts };

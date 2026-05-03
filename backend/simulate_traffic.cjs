@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const API_URL = "http://backend:5000/api/logs"; // Docker internal URL
+const API_URL = "http://localhost:5000/api/logs"; // Docker internal URL
 
 const endpoints = ["/login", "/users", "/products", "/checkout"];
 const methods = ["GET", "POST"];
@@ -39,7 +39,12 @@ async function sendLog(isAnomaly = false) {
   const payload = generatePayload(isAnomaly);
 
   try {
-    const res = await axios.post(API_URL, payload);
+    const res = await axios.post(API_URL, payload, {
+      headers: {
+        "x-api-key": "raunit_super_secure_key_123",
+      },
+    });
+
     console.log(
       `📡 ${isAnomaly ? "ATTACK" : "NORMAL"} →`,
       payload.ip,

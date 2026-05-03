@@ -1,115 +1,177 @@
 import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Shield, Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
-import { Shield, Lock, User } from 'lucide-react';
+import Supernova from '../components/Supernova';
 
+/**
+ * Login Component
+ */
 export const Login = () => {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('admin');
-  const [password, setPassword] = useState('password');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login, register } = useAuth();
+
   const navigate = useNavigate();
+  const { login, error, setError } = useAuth(); // 🔥 use global error
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setError('');
+
+    setLocalError('');
+    setError(null);
+
+    if (!email.trim() || !password) {
+      setLocalError('Email and password are required');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      if (isLogin) {
-        await login(username, password);
+      const result = await login(email, password);
+
+      if (result?.success) {
         navigate('/');
       } else {
-        await register(username, password);
-        // auto-login after successful registration
-        await login(username, password);
-        navigate('/');
+        setLocalError('Invalid credentials');
+        setPassword(''); // 🔥 clear password on failure
       }
-    } catch (err) {
-      setError(err.response?.data?.error || `Failed to ${isLogin ? 'login' : 'register'}`);
+    } catch {
+      setLocalError('Login failed. Try again.');
     } finally {
-      setIsLoading(false);
+      setIsLoading(false); // 🔥 FIX: prevents infinite loading
     }
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background decorations */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/20 blur-[100px] pointer-events-none"></div>
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-danger/10 blur-[100px] pointer-events-none"></div>
+    <div className="relative min-h-screen overflow-hidden bg-black text-slate-100 font-sans">
+      <Supernova />
 
-      <div className="bg-surface/80 backdrop-blur-xl border border-gray-800 p-8 rounded-2xl w-full max-w-md shadow-2xl relative z-10">
-        <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mb-4 border border-primary/20 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-            <Shield className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="text-2xl font-bold tracking-wider">THREAT<span className="text-primary">OPS</span></h1>
-          <p className="text-gray-400 mt-2 text-sm">{isLogin ? 'Sign in to access the dashboard' : 'Create an account'}</p>
-        </div>
+      <style>{`
+        @keyframes fadeInScale {
+          from { opacity: 0; transform: scale(0.95) translateY(10px); }
+          to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .animate-premium-in {
+          animation: fadeInScale 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        .glass-card {
+          background: rgba(15, 23, 42, 0.7);
+          backdrop-filter: blur(24px);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+          transition: all 0.3s ease;
+        }
+        .login-card:hover {
+          box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+          transform: translateY(-2px);
+          border-color: rgba(59, 130, 246, 0.3);
+        }
+      `}</style>
 
-        {error && (
-          <div className="mb-6 p-3 rounded-lg bg-danger/10 border border-danger/20 text-danger text-sm text-center">
-            {error}
-          </div>
-        )}
+      <div className="relative z-10 flex items-center justify-center min-h-screen p-4">
+        <div className="w-full max-w-md animate-premium-in">
+          <div className="glass-card login-card p-8 rounded-[2rem] border border-white/10">
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1.5">Username</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
-                <User className="h-5 w-5" />
+            {/* Header */}
+            <div className="flex flex-col items-center mb-10">
+              <div className="w-20 h-20 bg-primary/20 rounded-2xl flex items-center justify-center mb-6 border border-primary/20 shadow-lg shadow-primary/10">
+                <Shield className="w-10 h-10 text-primary" />
               </div>
-              <input
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2.5 bg-background border border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-gray-100 placeholder-gray-500 transition-colors"
-                placeholder="admin"
-              />
+              <h1 className="text-3xl font-extrabold tracking-tighter">
+                THREAT<span className="text-primary">OPS</span>
+              </h1>
+              <p className="text-slate-400 mt-2 text-sm font-medium">
+                Cybersecurity Monitoring System
+              </p>
+            </div>
+
+            {/* 🔥 ERROR DISPLAY */}
+            {(localError || error) && (
+              <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{localError || error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+
+              {/* EMAIL */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      setLocalError('');
+                      setError(null);
+                    }}
+                    className="block w-full pl-12 pr-4 py-4 bg-slate-900/50 border border-white/5 rounded-2xl focus:ring-2 focus:ring-primary/40 outline-none"
+                    placeholder="name@company.com"
+                  />
+                </div>
+              </div>
+
+              {/* PASSWORD */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest ml-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-500" />
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      setLocalError('');
+                      setError(null);
+                    }}
+                    className="block w-full pl-12 pr-4 py-4 bg-slate-900/50 border border-white/5 rounded-2xl focus:ring-2 focus:ring-primary/40 outline-none"
+                    placeholder="••••••••"
+                  />
+                </div>
+              </div>
+
+              {/* BUTTON */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full py-4 px-4 rounded-2xl font-bold text-white bg-primary hover:bg-primary/90 disabled:opacity-50 transition-all shadow-lg shadow-primary/20"
+              >
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Authenticating...
+                  </span>
+                ) : (
+                  'Sign In to Dashboard'
+                )}
+              </button>
+            </form>
+
+            <div className="mt-8 text-center">
+              <p className="text-slate-500 text-sm">
+                Need access?{' '}
+                <Link to="/register" className="text-primary hover:underline font-bold">
+                  Request Account
+                </Link>
+              </p>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-400 mb-1.5">Password</label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-500">
-                <Lock className="h-5 w-5" />
-              </div>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="block w-full pl-10 pr-3 py-2.5 bg-background border border-gray-700 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary text-gray-100 placeholder-gray-500 transition-colors"
-                placeholder="••••••••"
-              />
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
-          >
-            {isLoading ? (isLogin ? 'Signing in...' : 'Registering...') : (isLogin ? 'Sign in' : 'Register')}
-          </button>
-        </form>
-        
-        <div className="mt-4 text-center">
-          <button
-            type="button"
-            onClick={() => {
-              setIsLogin(!isLogin);
-              setError('');
-            }}
-            className="text-sm text-primary hover:text-primary/80 transition-colors"
-          >
-            {isLogin ? "Don't have an account? Register" : "Already have an account? Sign in"}
-          </button>
+          <p className="text-center mt-8 text-slate-600 text-[10px] tracking-widest uppercase font-bold opacity-50">
+            &copy; 2026 ThreatOps Systems
+          </p>
         </div>
       </div>
     </div>

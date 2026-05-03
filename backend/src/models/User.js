@@ -12,6 +12,7 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
+      minlength: 6, // 🔒 basic security
     },
     role: {
       type: String,
@@ -25,17 +26,22 @@ const userSchema = new mongoose.Schema(
 );
 
 
-// ✅ FIXED PRE-SAVE HOOK (NO BUG)
+// ✅ MODERN PRE-SAVE HOOK (ASYNC/AWAIT)
 userSchema.pre("save", async function () {
   if (!this.isModified("password")) return;
 
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  } catch (error) {
+    throw error;
+  }
 });
 
 
-// ✅ PASSWORD CHECK
+// ✅ PASSWORD CHECK (SAFE)
 userSchema.methods.comparePassword = async function (password) {
+  if (!password) return false;
   return bcrypt.compare(password, this.password);
 };
 

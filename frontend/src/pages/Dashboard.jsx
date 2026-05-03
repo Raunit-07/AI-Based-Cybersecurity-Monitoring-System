@@ -27,77 +27,80 @@ export const Dashboard = () => {
       : 0;
 
   return (
-    <div className="space-y-6">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">System Overview</h1>
-          <p className="text-gray-400 text-sm mt-1">
-            Real-time threat monitoring and network analysis.
-          </p>
+    <div className="relative min-h-screen overflow-hidden bg-black">
+      {/* Content container with z-index: 10 */}
+      <div className="relative z-10 p-6 space-y-6">
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">System Overview</h1>
+            <p className="text-gray-400 text-sm mt-1">
+              Real-time threat monitoring and network analysis.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-full border border-gray-800 text-sm">
+            <div
+              className={`w-2 h-2 rounded-full ${
+                isConnected ? "bg-green-500" : "bg-red-500"
+              }`}
+            ></div>
+            <span className="text-gray-300">
+              {isConnected ? "System Online" : "Disconnected"}
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-full border border-gray-800 text-sm">
-          <div
-            className={`w-2 h-2 rounded-full ${
-              isConnected ? "bg-green-500" : "bg-red-500"
-            }`}
-          ></div>
-          <span className="text-gray-300">
-            {isConnected ? "System Online" : "Disconnected"}
-          </span>
-        </div>
-      </div>
+        {/* STATS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <StatCard
+            title="Active Threats"
+            value={activeThreats}
+            icon={<Shield className="w-6 h-6 text-yellow-400" />}
+          />
 
-      {/* STATS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard
-          title="Active Threats"
-          value={activeThreats}
-          icon={<Shield className="w-6 h-6 text-yellow-400" />}
-        />
+          <StatCard
+            title="Critical Alerts"
+            value={criticalAlerts}
+            icon={<AlertTriangle className="w-6 h-6 text-red-500" />}
+          />
 
-        <StatCard
-          title="Critical Alerts"
-          value={criticalAlerts}
-          icon={<AlertTriangle className="w-6 h-6 text-red-500" />}
-        />
+          <StatCard
+            title="Live Traffic (req/s)"
+            value={currentRequests}
+            icon={<Activity className="w-6 h-6 text-blue-400" />}
+          />
 
-        <StatCard
-          title="Live Traffic (req/s)"
-          value={currentRequests}
-          icon={<Activity className="w-6 h-6 text-blue-400" />}
-        />
-
-        <StatCard
-          title="Monitored IPs"
-          value={ips.length}
-          icon={<Database className="w-6 h-6 text-green-400" />}
-        />
-      </div>
-
-      {/* MAIN GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <TrafficChart data={trafficData} />
+          <StatCard
+            title="Monitored IPs"
+            value={ips.length}
+            icon={<Database className="w-6 h-6 text-green-400" />}
+          />
         </div>
 
-        <div className="h-[400px]">
-          {isLoadingAlerts ? (
+        {/* MAIN GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <TrafficChart data={trafficData} />
+          </div>
+
+          <div className="h-[400px]">
+            {isLoadingAlerts ? (
+              <Loader />
+            ) : (
+              <AlertsList alerts={safeAlerts} limit={6} />
+            )}
+          </div>
+        </div>
+
+        {/* IP TABLE */}
+        <div className="w-full">
+          {isLoadingIPs ? (
             <Loader />
           ) : (
-            <AlertsList alerts={safeAlerts} limit={6} />
+            <SuspiciousIPsTable ips={ips} />
           )}
         </div>
-      </div>
-
-      {/* IP TABLE */}
-      <div className="w-full">
-        {isLoadingIPs ? (
-          <Loader />
-        ) : (
-          <SuspiciousIPsTable ips={ips} />
-        )}
       </div>
     </div>
   );

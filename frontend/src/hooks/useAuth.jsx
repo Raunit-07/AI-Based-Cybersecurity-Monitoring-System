@@ -5,14 +5,20 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // for initial load
+  const [authLoading, setAuthLoading] = useState(false); // 🔥 login/register loading
+  const [error, setError] = useState(null); // 🔥 error state
 
+  // ================= PERSIST LOGIN =================
   useEffect(() => {
     const fetchUser = async () => {
       try {
-        const response = await api.get('/auth/me');
-        if (response.data.success) {
-          setUser(response.data.data.user);
+        const res = await api.get('/auth/me');
+
+        if (res.data?.success) {
+          setUser(res.data.data.user);
+        } else {
+          setUser(null);
         }
       } catch (error) {
         setUser(null);
@@ -20,50 +26,102 @@ export const AuthProvider = ({ children }) => {
         setLoading(false);
       }
     };
+
     fetchUser();
   }, []);
 
-  const login = async (username, password) => {
-    const response = await api.post('/auth/login', { username, password });
-    if (response.data.success) {
-      setUser(response.data.data.user);
-      if (response.data.data.token) {
-        localStorage.setItem('token', response.data.data.token);
+  // ================= LOGIN =================
+  const login = async (email, password) => {
+    setAuthLoading(true);
+    setError(null);
+
+    try {
+      const res = await api.post('/auth/login', {
+        email,
+        password
+      });
+
+      if (res.data?.success) {
+        setUser(res.data.data.user);
+        return { success: true };
       }
-      return true;
+
+      // fallback if API returns success false
+      setError('Invalid credentials');
+      return { success: false };
+
+    } catch (error) {
+      const message =
+        error.response?.data?.message || 'Invalid credentials, try again';
+
+      setError(message);
+      return { success: false };
+    } finally {
+      setAuthLoading(false); // 🔥 FIX: prevents infinite loading
     }
-    throw new Error('Login failed');
   };
 
+  // ================= REGISTER =================
   const register = async (username, password, role = 'analyst') => {
-    const response = await api.post('/auth/register', { username, password, role });
-    if (response.data.success) {
-      if (response.data.data && response.data.data.token) {
-        localStorage.setItem('token', response.data.data.token);
+    setAuthLoading(true);
+    setError(null);
+
+    try {
+      const response = await api.post('/auth/register', {
+        username,
+        password,
+        role
+      });
+
+      if (response.data?.success) {
+        return { success: true };
       }
-      return true;
+
+      setError('Registration failed');
+      return { success: false };
+
+    } catch (error) {
+      const message =
+        error.response?.data?.message || 'Registration failed';
+
+      setError(message);
+      return { success: false };
+    } finally {
+      setAuthLoading(false);
     }
-    throw new Error('Registration failed');
   };
 
+  // ================= LOGOUT =================
   const logout = async () => {
     try {
       await api.post('/auth/logout');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('token');
       setUser(null);
+      setError(null);
     }
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        loading,
+        authLoading, // 🔥 use this in button
+        error,       // 🔥 show this in UI
+        setError     // optional reset
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
+// ================= HOOK =================
 export const useAuth = () => {
   return useContext(AuthContext);
 };

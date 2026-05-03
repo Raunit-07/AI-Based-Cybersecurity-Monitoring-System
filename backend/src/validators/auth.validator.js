@@ -24,9 +24,17 @@ export const registerValidator = [
 // ================= LOGIN VALIDATOR =================
 export const loginValidator = [
   body("username")
+    .optional()
     .trim()
     .notEmpty()
     .withMessage("Username is required"),
+
+  body("email")
+    .optional()
+    .trim()
+    .notEmpty()
+    .isEmail()
+    .withMessage("Valid email is required"),
 
   body("password")
     .notEmpty()

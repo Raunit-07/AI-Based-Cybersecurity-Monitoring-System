@@ -2,17 +2,24 @@ import axios from "axios";
 
 export const sendSlackAlert = async (alert) => {
   try {
-    if (!process.env.SLACK_WEBHOOK_URL) {
-      console.warn("⚠️ Slack webhook missing — skipping");
+    const webhook = process.env.SLACK_WEBHOOK_URL;
+
+    // 🔍 DEBUG (you asked for this)
+    console.log("Slack URL:", webhook ? "Loaded ✅" : "Missing ❌");
+
+    if (!webhook) {
+      console.warn("Slack webhook not configured");
       return;
     }
 
-    await axios.post(process.env.SLACK_WEBHOOK_URL, {
-      text: `🚨 ALERT\nIP: ${alert.ip}\nType: ${alert.type}\nSeverity: ${alert.severity}`,
-    });
+    const message = {
+      text: `🚨 *Threat Detected*\nIP: ${alert.ip}\nType: ${alert.type}\nSeverity: ${alert.severity}`
+    };
 
-    console.log("💬 Slack alert sent");
+    await axios.post(webhook, message);
+
+    console.log("✅ Slack alert sent");
   } catch (error) {
-    console.error("Slack error:", error.message);
+    console.error("❌ Slack Error:", error.response?.data || error.message);
   }
 };

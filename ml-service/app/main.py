@@ -16,14 +16,14 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description="High-performance anomaly detection microservice",
     version="1.0.0",
-    docs_url="/docs",        # ALWAYS ENABLE (important for debugging)
+    docs_url="/docs",   # keep enabled for dev/debug
     redoc_url="/redoc"
 )
 
 # ================= CORS =================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # restrict in production
+    allow_origins=settings.CORS_ORIGINS if hasattr(settings, "CORS_ORIGINS") else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -39,12 +39,18 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 # ================= ROOT ROUTE =================
 @app.get("/")
 def root():
-    return {"message": "ML Service Running ✅"}
+    return {
+        "message": "ML Service Running ✅",
+        "version": "1.0.0"
+    }
 
 # ================= HEALTH CHECK =================
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "model_loaded": model_manager.model is not None
+    }
 
 # ================= STARTUP =================
 @app.on_event("startup")
@@ -52,18 +58,30 @@ async def startup_event():
     logger.info("🚀 Starting Anomaly Detection Service...")
 
     try:
-        # Ensure correct working directory
-        model_path = "artifacts/model.joblib"
+        # ✅ FIXED: Use env-based model path
+        model_path = settings.MODEL_PATH
+
+        logger.info(f"📂 Loading model from: {model_path}")
 
         if not os.path.exists(model_path):
+            logger.error(f"❌ Model file not found at {model_path}")
             raise FileNotFoundError(f"Model not found at {model_path}")
 
+        # ✅ Load model
         model_manager.load_model()
-        logger.info("✅ Model loaded successfully")
+
+        # ✅ Extra validation
+        if model_manager.model is None:
+            raise RuntimeError("Model loaded but is None")
+
+        logger.info("✅ Model loaded successfully and ready")
 
     except Exception as e:
-        logger.error(f"❌ Failed to load model: {e}")
-        # Don't crash service — but log clearly
+        logger.error("❌ Failed to load model at startup", exc_info=True)
+
+        # ⚠️ IMPORTANT:
+        # Do NOT crash service, but system will return 503 in endpoints
+        # This allows debugging instead of full crash
 
 # ================= SHUTDOWN =================
 @app.on_event("shutdown")

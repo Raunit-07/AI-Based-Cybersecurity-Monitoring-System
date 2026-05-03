@@ -2,18 +2,17 @@ import logsService from "../services/logs.service.js";
 import catchAsync from "../utils/catchAsync.js";
 import apiResponse from "../utils/apiResponse.js";
 
-// ================= INGEST LOG =================
-const ingestLog = catchAsync(async (req, res) => {
+// ================= CREATE / INGEST LOG =================
+const createLog = catchAsync(async (req, res) => {
   const logData = req.body;
 
-  // ✅ Basic validation safeguard
-  if (!logData.ip || typeof logData.requests === "undefined") {
+  // ✅ Validation
+  if (!logData || !logData.ip) {
     return apiResponse(res, 400, false, null, "Invalid log data");
   }
 
   const io = req.app.get("io");
 
-  // ✅ Use service (IMPORTANT - single source of truth)
   const result = await logsService.processLog(logData, io);
 
   return apiResponse(
@@ -31,21 +30,10 @@ const ingestLog = catchAsync(async (req, res) => {
 
 // ================= GET LOGS =================
 const getLogs = catchAsync(async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit, 10) || 50, 100);
-  const skip = parseInt(req.query.skip, 10) || 0;
+  const logs = await logsService.getLogs?.() || [];
 
-  const { logs, total } = await logsService.getLogs({}, { limit, skip });
-
-  apiResponse(
-    res,
-    200,
-    true,
-    { logs, total, limit, skip },
-    "Logs fetched successfully"
-  );
+  return apiResponse(res, 200, true, logs, "Logs fetched successfully");
 });
 
-export default {
-  ingestLog,
-  getLogs,
-};
+// ✅ NAMED EXPORTS (IMPORTANT)
+export { createLog, getLogs };

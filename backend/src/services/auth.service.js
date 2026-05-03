@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
 
 // ================= TOKEN GENERATION =================
 const generateTokens = (userId, role) => {
@@ -30,7 +32,13 @@ const registerUser = async (username, password, role = "user") => {
     throw error;
   }
 
-  const user = new User({ username, password, role });
+  // Password will be hashed by the pre-save hook in User model
+  const user = new User({
+    username,
+    password,
+    role
+  });
+
   await user.save();
 
   return user;
@@ -38,13 +46,15 @@ const registerUser = async (username, password, role = "user") => {
 
 // ================= LOGIN =================
 const loginUser = async (username, password) => {
-const user = await User.findOne({ username }).select("+password +refreshToken");
+  const user = await User.findOne({ username }).select("+password +refreshToken");
+
   if (!user) {
     const error = new Error("Invalid credentials");
     error.status = 401;
     throw error;
   }
 
+  // Use the comparePassword method from User model
   const isMatch = await user.comparePassword(password);
 
   if (!isMatch) {
@@ -55,8 +65,12 @@ const user = await User.findOne({ username }).select("+password +refreshToken");
 
   const { accessToken, refreshToken } = generateTokens(user._id, user.role);
 
-  user.refreshToken = refreshToken;
-  await user.save();
+  // 🔥 PRODUCTION BEST PRACTICE: Use findByIdAndUpdate to update tokens 
+  // without triggering 'save' middleware (prevents any accidental re-hashing)
+  await User.findByIdAndUpdate(user._id, { refreshToken });
+
+  // Add a non-sensitive log for successful login
+  logger.info(`Successful login for user: ${username}`);
 
   return { user, accessToken, refreshToken };
 };

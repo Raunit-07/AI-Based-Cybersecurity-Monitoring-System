@@ -6,6 +6,8 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
 import alertRoutes from "./routes/alerts.routes.js";
+import alertsController from "./controllers/alerts.controller.js";
+import { authMiddleware } from "./middlewares/auth.middleware.js";
 
 
 const app = express();
@@ -13,12 +15,10 @@ const app = express();
 // ================= SECURITY =================
 app.use(helmet());
 
-app.use(
-  cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: ["http://localhost:5173", "http://localhost:5174"],
+  credentials: true
+}));
 
 // ================= BODY =================
 app.use(express.json());
@@ -44,6 +44,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/alerts", alertRoutes);
+app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 
 // ================= DEBUG ROUTE =================
 app.get("/test", (req, res) => {
