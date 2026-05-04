@@ -8,8 +8,8 @@ import { sendEmailAlert } from "../integrations/email.js";
 const sanitizeLogData = (data) => {
   return {
     ip: String(data.ip || "").trim(),
-    requests: Number(data.requests) || 0,
-    failedLogins: Number(data.failedLogins) || 0,
+    requests: Math.max(0, Number(data.requests) || 0),
+    failedLogins: Math.max(0, Number(data.failedLogins) || 0),
     endpoint: String(data.endpoint || "/unknown"),
     method: String(data.method || "GET"),
     timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
@@ -64,7 +64,7 @@ const processLog = async (logData, io) => {
         endpoint: cleanData.endpoint,
       });
 
-      prediction = mlResponse.data || mlResponse;
+      prediction = mlResponse?.data || mlResponse || prediction;
 
       console.log("🧠 ML Result:", prediction);
     } catch (error) {
@@ -77,7 +77,7 @@ const processLog = async (logData, io) => {
       cleanData.requests > 800 ||
       cleanData.failedLogins > 10;
 
-    const anomalyScore = prediction.anomaly_score || 0;
+    const anomalyScore = Number(prediction.anomaly_score) || 0;
 
     const attackType =
       cleanData.failedLogins > 10
@@ -131,22 +131,36 @@ const processLog = async (logData, io) => {
       console.log("🔥 Alert Created:", alert);
 
       // ================= EXTERNAL ALERTS =================
-      await sendSlackAlert(alertPayload);
-      await sendEmailAlert(alertPayload);
+      try {
+        await sendSlackAlert(alertPayload);
+        await sendEmailAlert(alertPayload);
+      } catch (err) {
+        console.error("⚠️ Alert delivery failed:", err.message);
+      }
 
-      // ================= SOCKET =================
+      // ================= SOCKET (FIXED) =================
       if (io) {
-        io.emit("new-alert", alert);
+        console.log("🔥 EMITTING ALERT TO FRONTEND");
+
+        io.emit("new_alert", {
+          id: alert._id,
+          type: alert.type,
+          severity: alert.severity,
+          source: alert.ip,
+          time: alert.createdAt,
+        });
+      } else {
+        console.warn("⚠️ Socket IO not available");
       }
     }
 
-    // ================= REAL-TIME =================
+    // ================= REAL-TIME TRAFFIC =================
     if (io) {
-      io.emit("new_log", log);
+      console.log("🔥 EMITTING TRAFFIC:", log.requests);
 
       io.emit("traffic_update", {
-        timestamp: Date.now(),
         requests: log.requests,
+        timestamp: Date.now(),
       });
     }
 

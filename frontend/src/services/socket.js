@@ -25,8 +25,7 @@ let socket = null;
 export const getSocket = () => {
   if (!socket) {
     socket = io(BASE_URL, {
-      path: "/socket.io", // must match backend
-      transports: ["websocket"], // stable in production
+      path: "/socket.io", // must match backend 
       withCredentials: true,
 
       // 🔁 Reconnection strategy

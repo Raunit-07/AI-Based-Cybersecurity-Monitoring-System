@@ -13,35 +13,65 @@ const useAlerts = () => {
     useEffect(() => {
         const socket = getSocket();
 
-        socket.on("connect", () => {
-            console.log("✅ Connected to backend");
-        });
+        // ================= CONNECTION =================
+        const handleConnect = () => {
+            console.log("✅ Connected to backend:", socket.id);
+        };
 
-        // 🚨 RECEIVE ALERT
-        socket.on("new_alert", (data) => {
-            console.log("🚨 New Alert:", data);
+        // ================= ALERT HANDLER =================
+        const handleNewAlert = (data) => {
+            console.log("🚨 RECEIVED ALERT:", data);
 
-            setAlerts((prev) => [data, ...prev].slice(0, 10));
+            if (!data || !data.id) return;
 
-            // 🔥 UPDATE STATS
+            // ✅ Normalize alert (MATCH BACKEND FORMAT)
+            const formattedAlert = {
+                id: data.id,
+                type: data.type,
+                severity: data.severity,
+                source: data.source,
+                time: data.time,
+                status: "active",
+            };
+
+            // ✅ Update alerts list (limit to 10)
+            setAlerts((prev) => [formattedAlert, ...prev].slice(0, 10));
+
+            // ✅ Update stats safely
             setStats((prev) => ({
                 ...prev,
                 activeThreats: prev.activeThreats + 1,
                 criticalAlerts:
-                    data.attack_type === "ddos" ? prev.criticalAlerts + 1 : prev.criticalAlerts,
+                    data.type === "ddos"
+                        ? prev.criticalAlerts + 1
+                        : prev.criticalAlerts,
                 monitoredIPs: prev.monitoredIPs + 1,
             }));
-        });
+        };
 
-        // 📊 LIVE TRAFFIC
-        socket.on("traffic_update", (data) => {
+        // ================= TRAFFIC HANDLER =================
+        const handleTrafficUpdate = (data) => {
+            console.log("📊 RECEIVED TRAFFIC:", data);
+
+            if (!data || typeof data.requests !== "number") return;
+
             setStats((prev) => ({
                 ...prev,
                 totalRequests: data.requests,
             }));
-        });
+        };
 
-        return () => socket.disconnect();
+        // ================= ATTACH EVENTS =================
+        socket.on("connect", handleConnect);
+        socket.on("new_alert", handleNewAlert);
+        socket.on("traffic_update", handleTrafficUpdate);
+
+        // ================= CLEANUP =================
+        return () => {
+            socket.off("connect", handleConnect);
+            socket.off("new_alert", handleNewAlert);
+            socket.off("traffic_update", handleTrafficUpdate);
+        };
     }, []);
 
     return { alerts, stats };

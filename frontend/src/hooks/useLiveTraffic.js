@@ -7,7 +7,7 @@ export const useLiveTraffic = () => {
   const [isConnected, setIsConnected] = useState(false);
 
   const queryClient = useQueryClient();
-  const socketRef = useRef(null); // ✅ prevent duplicate listeners
+  const socketRef = useRef(null);
 
   useEffect(() => {
     const socket = getSocket();
@@ -32,36 +32,50 @@ export const useLiveTraffic = () => {
 
     // ================= TRAFFIC =================
     const handleTrafficUpdate = (data) => {
-      try {
-        const safeRequests = Number(data?.requests) || 0;
+      console.log("📊 RECEIVED TRAFFIC:", data);
 
-        setTrafficData((prev) => {
-          const updated = [
-            ...prev.slice(-19), // keep last 20 points
-            {
-              time: Date.now(),
-              requests: safeRequests,
-            },
-          ];
-          return updated;
-        });
-      } catch (err) {
-        console.error("❌ Traffic update error:", err);
+      if (!data || typeof data.requests !== "number") {
+        console.warn("⚠️ Invalid traffic data:", data);
+        return;
       }
+
+      const safeRequests = Math.max(0, Number(data.requests));
+
+      setTrafficData((prev) => {
+        const updated = [
+          ...prev.slice(-19), // keep last 20 points
+          {
+            time: Date.now(),
+            requests: safeRequests,
+          },
+        ];
+        return updated;
+      });
     };
 
     // ================= ALERTS =================
     const handleNewAlert = (alert) => {
-      try {
-        if (!alert || typeof alert !== "object") return;
+      console.log("🚨 RECEIVED ALERT (traffic hook):", alert);
 
-        queryClient.setQueryData(["alerts"], (oldData) => {
-          const safeOld = Array.isArray(oldData) ? oldData : [];
-          return [alert, ...safeOld].slice(0, 50);
-        });
-      } catch (err) {
-        console.error("❌ Alert update error:", err);
+      if (!alert || typeof alert !== "object" || !alert.id) {
+        console.warn("⚠️ Invalid alert data:", alert);
+        return;
       }
+
+      // ✅ Normalize alert structure (important)
+      const formattedAlert = {
+        id: alert.id,
+        type: alert.type,
+        severity: alert.severity,
+        source: alert.source,
+        time: alert.time,
+        status: "active",
+      };
+
+      queryClient.setQueryData(["alerts"], (oldData) => {
+        const safeOld = Array.isArray(oldData) ? oldData : [];
+        return [formattedAlert, ...safeOld].slice(0, 50);
+      });
     };
 
     // ================= REGISTER EVENTS =================

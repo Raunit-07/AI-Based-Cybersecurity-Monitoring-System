@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-dotenv.config(); // MUST be first
+dotenv.config();
 
 import dns from "dns";
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
@@ -9,51 +9,45 @@ import app from "./app.js";
 import connectDB from "./config/db.js";
 import logger from "./utils/logger.js";
 import { Server } from "socket.io";
-
-// Email verification
 import { verifyEmailService } from "./integrations/email.js";
 
 const PORT = process.env.PORT || 5000;
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 /**
  * ================= SERVER SETUP =================
  */
 const server = http.createServer(app);
 
-const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
-
 /**
  * ================= SOCKET.IO CONFIG =================
  */
 const io = new Server(server, {
   cors: {
-    origin: [FRONTEND_URL],
+    origin: FRONTEND_URL,
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["websocket", "polling"], // fallback support
-  allowEIO3: true, // legacy browser support
+  transports: ["websocket", "polling"],
   pingTimeout: 60000,
   pingInterval: 25000,
 });
 
 /**
- * ================= SOCKET AUTH MIDDLEWARE =================
- * (Optional but recommended for protected sockets)
+ * ================= SOCKET AUTH =================
  */
 io.use((socket, next) => {
   try {
-    // Example: read token from cookies or auth header
     const token =
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.split(" ")[1];
 
-    // If you want strict auth, enable this:
-    // if (!token) return next(new Error("Unauthorized socket"));
+    // Enable later if needed
+    // if (!token) return next(new Error("Unauthorized"));
 
     next();
   } catch (err) {
-    logger.error("Socket auth error:", err);
+    logger.error("❌ Socket auth error:", err);
     next(new Error("Socket authentication failed"));
   }
 });
@@ -64,7 +58,10 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   logger.info(`✅ Socket connected: ${socket.id}`);
 
-  // Example event
+  // Debug handshake
+  logger.info("🔥 Handshake headers:", socket.handshake.headers);
+  logger.info("🌐 Origin:", socket.handshake.headers.origin);
+
   socket.on("ping", () => {
     socket.emit("pong");
   });
@@ -79,7 +76,7 @@ io.on("connection", (socket) => {
 });
 
 /**
- * ================= MAKE IO AVAILABLE =================
+ * ================= ATTACH IO TO APP =================
  */
 app.set("io", io);
 
@@ -94,13 +91,7 @@ let serverInstance = null;
 const startServer = async () => {
   try {
     await connectDB();
-
     await verifyEmailService();
-
-    if (serverInstance) {
-      logger.warn("⚠️ Restarting server...");
-      await new Promise((resolve) => serverInstance.close(resolve));
-    }
 
     serverInstance = server.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
@@ -157,7 +148,4 @@ process.on("uncaughtException", (err) => {
   shutdown();
 });
 
-/**
- * ================= EXPORT =================
- */
 export { serverInstance as server, io };
