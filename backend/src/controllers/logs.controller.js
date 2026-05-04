@@ -6,13 +6,16 @@ import apiResponse from "../utils/apiResponse.js";
 const createLog = catchAsync(async (req, res) => {
   const logData = req.body;
 
-  // ✅ Validation
+  // ================= VALIDATION =================
   if (!logData || !logData.ip) {
     return apiResponse(res, 400, false, null, "Invalid log data");
   }
 
-  const io = req.app.get("io");
+  // ================= SOCKET.IO =================
+  // Support both patterns
+  const io = req.io || req.app.get("io");
 
+  // ================= PROCESS LOG =================
   const result = await logsService.processLog(logData, io);
 
   return apiResponse(
@@ -21,8 +24,8 @@ const createLog = catchAsync(async (req, res) => {
     true,
     {
       log: result.log,
-      alert: result.alert || null,
       ml: result.mlResult,
+      alert: result.alert || null,
     },
     "Log processed successfully"
   );
@@ -30,10 +33,24 @@ const createLog = catchAsync(async (req, res) => {
 
 // ================= GET LOGS =================
 const getLogs = catchAsync(async (req, res) => {
-  const logs = await logsService.getLogs?.() || [];
+  let logs = [];
 
-  return apiResponse(res, 200, true, logs, "Logs fetched successfully");
+  try {
+    if (logsService.getLogs) {
+      logs = await logsService.getLogs();
+    }
+  } catch (error) {
+    console.error("❌ Fetch logs error:", error.message);
+  }
+
+  return apiResponse(
+    res,
+    200,
+    true,
+    logs,
+    "Logs fetched successfully"
+  );
 });
 
-// ✅ NAMED EXPORTS (IMPORTANT)
+// ================= EXPORT =================
 export { createLog, getLogs };

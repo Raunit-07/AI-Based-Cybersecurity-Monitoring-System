@@ -1,52 +1,44 @@
 import dotenv from "dotenv";
-dotenv.config(); // 🔥 MUST BE FIRST
+dotenv.config(); // MUST BE FIRST
 
 import dns from "dns";
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
-import connectDB from "./config/db.js";
 import http from "http";
-import { Server } from "socket.io";
 import app from "./app.js";
+import connectDB from "./config/db.js";
 import logger from "./utils/logger.js";
+
+// ✅ CORRECT IMPORT
+import initSocket from "./sockets/index.js";
 
 const PORT = process.env.PORT || 5000;
 
-// ================= CREATE HTTP SERVER =================
+// ================= CREATE SERVER =================
 const server = http.createServer(app);
 
-// ================= INIT SOCKET.IO =================
-const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
-    credentials: true,
-  },
-});
+// ================= INIT SOCKET =================
+const io = initSocket(server);
 
-// ================= MAKE IO GLOBAL =================
+// ================= MAKE IO AVAILABLE =========
 app.set("io", io);
 
-// ================= SOCKET CONNECTION =================
-io.on("connection", (socket) => {
-  logger.info(`🟢 Client connected: ${socket.id}`);
-
-  socket.on("disconnect", () => {
-    logger.info(`🔴 Client disconnected: ${socket.id}`);
-  });
+app.use((req, res, next) => {
+  req.io = io;
+  next();
 });
 
-// ================= HANDLE SERVER ERRORS =================
+// ================= ERROR HANDLING =================
 server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
     logger.error(`❌ Port ${PORT} is already in use`);
-    process.exit(1); 
   } else {
     logger.error("❌ Server error:", err);
-    process.exit(1);
   }
+  process.exit(1);
 });
 
-// ================= START APP =================
+// ================= START =================
 const startServer = async () => {
   try {
     await connectDB();
@@ -54,7 +46,6 @@ const startServer = async () => {
     server.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
     });
-
   } catch (error) {
     logger.error("❌ Failed to start server:", error);
     process.exit(1);
@@ -63,7 +54,7 @@ const startServer = async () => {
 
 startServer();
 
-// ================= GRACEFUL SHUTDOWN =================
+// ================= SHUTDOWN =================
 process.on("SIGINT", () => {
   logger.info("🛑 Server shutting down...");
   server.close(() => {
@@ -77,5 +68,4 @@ process.on("unhandledRejection", (err) => {
   process.exit(1);
 });
 
-// ================= EXPORT =================
 export { server, io };

@@ -1,8 +1,10 @@
 import Log from "../models/log.model.js";
 import { createAlert } from "./alerts.service.js";
 import { detectThreat } from "./mlClient.js";
+import { sendSlackAlert } from "../integrations/slack.js";
+import { sendEmailAlert } from "../integrations/email.js";
 
-// ================= VALIDATION HELPER =================
+// ================= VALIDATION =================
 const sanitizeLogData = (data) => {
   return {
     ip: String(data.ip || "").trim(),
@@ -15,24 +17,39 @@ const sanitizeLogData = (data) => {
   };
 };
 
-// ================= PROCESS LOG =================
+// ================= SEVERITY =================
+const getSeverity = (data, prediction) => {
+  if (
+    prediction.attack_type === "ddos" ||
+    data.requests > 2000 ||
+    prediction.anomaly_score > 0.8
+  ) {
+    return "high";
+  }
+
+  if (
+    prediction.attack_type === "bruteforce" ||
+    data.failedLogins > 20
+  ) {
+    return "medium";
+  }
+
+  return "low";
+};
+
+// ================= MAIN PROCESS =================
 const processLog = async (logData, io) => {
   try {
-    // ✅ Debug: incoming data
     console.log("📥 Incoming Log:", logData);
 
-    // ✅ Validate input
     if (!logData || !logData.ip) {
       throw new Error("Invalid log data");
     }
 
     const cleanData = sanitizeLogData(logData);
 
-    // ================= SAVE LOG =================
-    const log = await Log.create(cleanData);
-
     // ================= ML DETECTION =================
-    let mlData = {
+    let prediction = {
       is_anomaly: false,
       anomaly_score: 0,
       attack_type: "normal",
@@ -40,63 +57,93 @@ const processLog = async (logData, io) => {
 
     try {
       const mlResponse = await detectThreat({
-        ip: log.ip,
-        requests: log.requests,
-        failedLogins: log.failedLogins,
+        ip: cleanData.ip,
+        requests: cleanData.requests,
+        failedLogins: cleanData.failedLogins,
+        method: cleanData.method,
+        endpoint: cleanData.endpoint,
       });
 
-      console.log("🧠 ML RAW:", mlResponse);
+      prediction = mlResponse.data || mlResponse;
 
-      // Handle both axios and direct return formats
-      mlData = mlResponse?.data || mlResponse || mlData;
+      console.log("🧠 ML Result:", prediction);
     } catch (error) {
       console.error("❌ ML Error:", error.message);
     }
 
-    // ================= HYBRID DETECTION =================
+    // ================= HYBRID DECISION =================
     const isAnomaly =
-      mlData.is_anomaly === true ||
-      mlData.anomaly_score > 0.6 ||
-      log.requests > 800 ||
-      log.failedLogins > 10;
+      prediction.is_anomaly === true ||
+      cleanData.requests > 800 ||
+      cleanData.failedLogins > 10;
 
-    console.log("🚨 Is Anomaly:", isAnomaly);
-
-    const anomalyScore = mlData.anomaly_score || 0;
+    const anomalyScore = prediction.anomaly_score || 0;
 
     const attackType =
-      log.failedLogins > 10
+      cleanData.failedLogins > 10
         ? "bruteforce"
-        : log.requests > 800
-        ? "ddos"
-        : mlData.attack_type || "suspicious";
+        : cleanData.requests > 800
+          ? "ddos"
+          : prediction.attack_type || "suspicious";
 
+    const severity = getSeverity(cleanData, {
+      ...prediction,
+      attack_type: attackType,
+    });
+
+    console.log("🚨 Final Decision:", {
+      isAnomaly,
+      anomalyScore,
+      attackType,
+      severity,
+    });
+
+    // ================= SAVE LOG =================
+    const log = await Log.create({
+      ...cleanData,
+      is_anomaly: isAnomaly,
+      anomaly_score: anomalyScore,
+      attack_type: attackType,
+    });
+
+    // ================= ALERT =================
     let alert = null;
 
-    // ================= ALERT CREATION =================
     if (isAnomaly) {
-      alert = await createAlert({
+      const alertPayload = {
         ip: log.ip,
-        type: attackType,
-        severity:
-          anomalyScore > 0.8
-            ? "critical"
-            : log.failedLogins > 10
-            ? "high"
-            : "medium",
+        attack_type: attackType,
+        severity,
+        requests: log.requests,
+        failedLogins: log.failedLogins,
+        anomaly_score: anomalyScore,
         timestamp: new Date(),
+      };
+
+      // DB Alert
+      alert = await createAlert({
+        ip: alertPayload.ip,
+        type: alertPayload.attack_type,
+        severity: alertPayload.severity,
+        timestamp: alertPayload.timestamp,
       });
 
       console.log("🔥 Alert Created:", alert);
 
-      // ✅ Emit alert to frontend
+      // ================= EXTERNAL ALERTS =================
+      await sendSlackAlert(alertPayload);
+      await sendEmailAlert(alertPayload);
+
+      // ================= SOCKET =================
       if (io) {
         io.emit("new-alert", alert);
       }
     }
 
-    // ================= TRAFFIC UPDATE =================
+    // ================= REAL-TIME =================
     if (io) {
+      io.emit("new_log", log);
+
       io.emit("traffic_update", {
         timestamp: Date.now(),
         requests: log.requests,
@@ -109,6 +156,7 @@ const processLog = async (logData, io) => {
         is_anomaly: isAnomaly,
         anomaly_score: anomalyScore,
         attack_type: attackType,
+        severity,
       },
       alert,
     };

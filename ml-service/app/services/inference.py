@@ -20,27 +20,22 @@ METHOD_MAP = {
 def preprocess(request: PredictionRequest) -> np.ndarray:
     """
     Convert request into model features safely
+    MUST match training features:
+    [requests, failed_logins, method_encoded, endpoint_length]
     """
 
-    # ✅ Input validation
-    if request.requests < 0 or request.failedLogins < 0:
-        raise ValueError("Invalid input: negative values not allowed")
+    requests = getattr(request, "requests", 0)
+    failed_logins = getattr(request, "failedLogins", 0)
 
-    requests = request.requests
-    failed_logins = request.failedLogins
-
-    method = request.method
-    endpoint = request.endpoint
+    method = getattr(request, "method", "GET")
+    endpoint = getattr(request, "endpoint", "/")
 
     method_encoded = METHOD_MAP.get(method, 0)
     endpoint_length = len(endpoint)
 
-    # ✅ IMPORTANT: MUST MATCH TRAINING FEATURES
-    features = np.array(
-        [[requests, failed_logins, method_encoded, endpoint_length]]
-    )
-
-    logger.info(f"Generated features: {features.tolist()}")
+    features = np.array([
+        [requests, failed_logins, method_encoded, endpoint_length]
+    ])
 
     return features
 
@@ -52,10 +47,11 @@ def determine_attack_type(
     if not is_anomaly:
         return "normal"
 
+    # 🔴 Priority-based classification
     if failed_logins >= 20:
         return "bruteforce"
 
-    if request_count >= 500:
+    if request_count >= 1000:
         return "ddos"
 
     return "suspicious"
@@ -64,21 +60,47 @@ def determine_attack_type(
 # ================= MAIN PIPELINE =================
 def run_prediction_pipeline(request: PredictionRequest):
     try:
+        # 🔹 Step 1: Preprocess
         features = preprocess(request)
 
+        # 🔹 Step 2: ML Prediction
         prediction, score = model_manager.predict(features)
 
-        is_anomaly = prediction == -1
+        logger.info(f"Prediction raw → pred={prediction}, score={score}")
 
-        # ✅ FIXED anomaly score logic
-        normalized_score = float(-score)
+        # 🔥 Step 3: HYBRID DETECTION (CRITICAL FIX)
+        is_anomaly = False
 
+        # 🟢 Rule 0: Safe normal traffic (VERY IMPORTANT)
+        if request.requests < 100 and request.failedLogins < 5:
+            is_anomaly = False
+
+        # 🔴 Rule 1: DDoS detection
+        elif request.requests >= 1000:
+            is_anomaly = True
+
+        # 🔴 Rule 2: Brute-force detection
+        elif request.failedLogins >= 20:
+            is_anomaly = True
+
+        # 🧠 Rule 3: ML fallback (controlled)
+        elif prediction == -1 and request.requests > 200:
+            is_anomaly = True
+
+        # 🔥 Step 4: Stable anomaly score
+        normalized_score = 0.05
+
+        if is_anomaly:
+            normalized_score = float(min(max(-score * 5, 0.4), 1))
+
+        # 🔹 Step 5: Attack classification
         attack_type = determine_attack_type(
             is_anomaly,
             request.requests,
             request.failedLogins,
         )
 
+        # 🔹 Step 6: Logging
         logger.info(
             "Prediction successful",
             extra={
@@ -91,6 +113,7 @@ def run_prediction_pipeline(request: PredictionRequest):
             },
         )
 
+        # 🔹 Step 7: Response
         return PredictionData(
             anomaly_score=normalized_score,
             is_anomaly=is_anomaly,

@@ -2,52 +2,48 @@ import mongoose from "mongoose";
 
 const logSchema = new mongoose.Schema(
   {
-    // ✅ IP address
+    // ================= BASIC INFO =================
+
     ip: {
       type: String,
       required: true,
       index: true,
+      trim: true,
     },
 
-    // ✅ Request count (DDoS detection)
     requests: {
       type: Number,
       required: true,
       min: 0,
-      max: 10000,
+      max: 100000, // increased for DDoS realism
     },
 
-    // ✅ Failed login attempts (Brute force)
     failedLogins: {
       type: Number,
       default: 0,
       min: 0,
-      max: 1000,
+      max: 10000,
     },
 
-    // ✅ API endpoint
     endpoint: {
       type: String,
       required: true,
       trim: true,
-      maxlength: 200,
-    },
-
-    // ✅ HTTP method
-    method: {
-      type: String,
-      required: true,
-      enum: ["GET", "POST", "PUT", "DELETE"],
-    },
-
-    // ✅ User agent
-    user_agent: {
-      type: String,
-      default: "unknown",
       maxlength: 300,
     },
 
-    // ✅ Timestamp
+    method: {
+      type: String,
+      required: true,
+      enum: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    },
+
+    user_agent: {
+      type: String,
+      default: "unknown",
+      maxlength: 500,
+    },
+
     timestamp: {
       type: Date,
       default: Date.now,
@@ -56,22 +52,22 @@ const logSchema = new mongoose.Schema(
 
     // ================= ML OUTPUT =================
 
-    threatAnalyzed: {
+    is_anomaly: {
       type: Boolean,
       default: false,
+      index: true, // 🔥 important for filtering
     },
 
-    anomalyScore: {
+    anomaly_score: {
       type: Number,
       default: 0,
-      min: 0,
-      max: 1,
     },
 
-    classification: {
+    attack_type: {
       type: String,
-      default: "normal",
       enum: ["normal", "ddos", "bruteforce", "suspicious"],
+      default: "normal",
+      index: true, // 🔥 important for analytics
     },
   },
   {
@@ -79,5 +75,9 @@ const logSchema = new mongoose.Schema(
     strict: true,
   }
 );
+
+// ================= INDEXES (PERFORMANCE) =================
+logSchema.index({ ip: 1, timestamp: -1 });
+logSchema.index({ attack_type: 1, timestamp: -1 });
 
 export default mongoose.model("Log", logSchema);
