@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-dotenv.config(); // MUST BE FIRST
+dotenv.config(); // MUST be first
 
 import dns from "dns";
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
@@ -10,35 +10,67 @@ import connectDB from "./config/db.js";
 import logger from "./utils/logger.js";
 import { Server } from "socket.io";
 
-// ✅ EMAIL VERIFY IMPORT
+// Email verification
 import { verifyEmailService } from "./integrations/email.js";
 
 const PORT = process.env.PORT || 5000;
 
-// ================= CREATE SERVER =================
+/**
+ * ================= SERVER SETUP =================
+ */
 const server = http.createServer(app);
 
-// ================= CORS CONFIG =================
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
-// ================= SOCKET.IO INIT (PRODUCTION SAFE) =================
+/**
+ * ================= SOCKET.IO CONFIG =================
+ */
 const io = new Server(server, {
   cors: {
     origin: [FRONTEND_URL],
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["websocket", "polling"], // ✅ allow fallback
-  pingTimeout: 60000, // ✅ prevent disconnects
+  transports: ["websocket", "polling"], // fallback support
+  allowEIO3: true, // legacy browser support
+  pingTimeout: 60000,
   pingInterval: 25000,
 });
 
-// ================= SOCKET EVENTS =================
+/**
+ * ================= SOCKET AUTH MIDDLEWARE =================
+ * (Optional but recommended for protected sockets)
+ */
+io.use((socket, next) => {
+  try {
+    // Example: read token from cookies or auth header
+    const token =
+      socket.handshake.auth?.token ||
+      socket.handshake.headers?.authorization?.split(" ")[1];
+
+    // If you want strict auth, enable this:
+    // if (!token) return next(new Error("Unauthorized socket"));
+
+    next();
+  } catch (err) {
+    logger.error("Socket auth error:", err);
+    next(new Error("Socket authentication failed"));
+  }
+});
+
+/**
+ * ================= SOCKET EVENTS =================
+ */
 io.on("connection", (socket) => {
   logger.info(`✅ Socket connected: ${socket.id}`);
 
+  // Example event
+  socket.on("ping", () => {
+    socket.emit("pong");
+  });
+
   socket.on("disconnect", (reason) => {
-    logger.info(`❌ Socket disconnected: ${socket.id} | Reason: ${reason}`);
+    logger.info(`❌ Socket disconnected: ${socket.id} | ${reason}`);
   });
 
   socket.on("error", (err) => {
@@ -46,39 +78,36 @@ io.on("connection", (socket) => {
   });
 });
 
-// ================= MAKE IO AVAILABLE (GLOBAL) =================
+/**
+ * ================= MAKE IO AVAILABLE =================
+ */
 app.set("io", io);
 
-// ❌ REMOVE THIS (IMPORTANT)
-// app.use((req, res, next) => {
-//   req.io = io;
-//   next();
-// });
-
-// ================= GLOBAL SERVER INSTANCE =================
+/**
+ * ================= SERVER INSTANCE =================
+ */
 let serverInstance = null;
 
-// ================= START SERVER =================
+/**
+ * ================= START SERVER =================
+ */
 const startServer = async () => {
   try {
     await connectDB();
 
-    // ✅ VERIFY EMAIL SERVICE
     await verifyEmailService();
 
-    // 🔁 Restart-safe
     if (serverInstance) {
-      logger.warn("⚠️ Closing previous server instance...");
+      logger.warn("⚠️ Restarting server...");
       await new Promise((resolve) => serverInstance.close(resolve));
     }
 
     serverInstance = server.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
-      logger.info(`🔌 Socket.IO ready at ws://localhost:${PORT}`);
-      logger.info(`🌐 Allowed frontend: ${FRONTEND_URL}`);
+      logger.info(`🌐 Frontend allowed: ${FRONTEND_URL}`);
+      logger.info(`🔌 Socket.IO ready`);
     });
 
-    // ================= ERROR HANDLING =================
     serverInstance.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
         logger.error(`❌ Port ${PORT} already in use`);
@@ -96,9 +125,11 @@ const startServer = async () => {
 
 startServer();
 
-// ================= GRACEFUL SHUTDOWN =================
+/**
+ * ================= GRACEFUL SHUTDOWN =================
+ */
 const shutdown = () => {
-  logger.info("🛑 Shutting down server...");
+  logger.info("🛑 Graceful shutdown initiated");
 
   if (serverInstance) {
     serverInstance.close(() => {
@@ -113,9 +144,11 @@ const shutdown = () => {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-// ================= GLOBAL ERROR HANDLING =================
+/**
+ * ================= GLOBAL ERROR HANDLING =================
+ */
 process.on("unhandledRejection", (err) => {
-  logger.error("❌ Unhandled Promise Rejection:", err);
+  logger.error("❌ Unhandled Rejection:", err);
   shutdown();
 });
 
@@ -124,5 +157,7 @@ process.on("uncaughtException", (err) => {
   shutdown();
 });
 
-// ================= EXPORT =================
+/**
+ * ================= EXPORT =================
+ */
 export { serverInstance as server, io };

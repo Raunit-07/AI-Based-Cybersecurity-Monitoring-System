@@ -7,24 +7,29 @@ import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
 import alertRoutes from "./routes/alerts.routes.js";
 import alertsController from "./controllers/alerts.controller.js";
+
 import { authMiddleware } from "./middlewares/auth.middleware.js";
 import { attachIO } from "./middlewares/socket.js";
-
 
 const app = express();
 
 // ================= SECURITY =================
 app.use(helmet());
 
+// 🔥 Attach Socket.IO middleware FIRST
 app.use(attachIO);
 
-app.use(cors({
-  origin: ["http://localhost:5173", "http://localhost:5174"],
-  credentials: true
-}));
+// ================= CORS =================
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 
-// ================= BODY =================
+// ================= BODY PARSING =================
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 // ================= BASIC SANITIZATION =================
@@ -39,29 +44,35 @@ app.use((req, res, next) => {
   next();
 });
 
-// ================= ROUTES =================
+// ================= HEALTH =================
 app.get("/", (req, res) => {
   res.send("Backend API Running ✅");
 });
 
+// ================= ROUTES =================
 app.use("/api/auth", authRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/alerts", alertRoutes);
+
+// 🔥 Protected route
 app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 
-// ================= DEBUG ROUTE =================
+// ================= DEBUG =================
 app.get("/test", (req, res) => {
   res.send("TEST OK");
 });
 
 // ================= 404 =================
 app.use((req, res) => {
-  res.status(404).json({ message: "Route not found" });
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+  });
 });
 
-// ================= ERROR =================
+// ================= GLOBAL ERROR HANDLER =================
 app.use((err, req, res, next) => {
-  console.error("Error:", err.message);
+  console.error("❌ Error:", err.message);
 
   res.status(err.status || 500).json({
     success: false,
