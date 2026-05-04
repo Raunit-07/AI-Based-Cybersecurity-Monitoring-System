@@ -1,31 +1,43 @@
 import nodemailer from "nodemailer";
 
-// ================= TRANSPORT =================
-const transporter = nodemailer.createTransport({
-  service: "gmail", // ✅ better for Gmail
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  },
-  connectionTimeout: 5000, // ✅ prevent hanging
-});
+// ================= CREATE TRANSPORTER =================
+const createTransporter = () => {
+  const user = process.env.EMAIL_USER?.trim();
+  const pass = process.env.EMAIL_PASS?.trim();
 
-// ================= VERIFY CONNECTION =================
-transporter.verify((error) => {
-  if (error) {
-    console.error("❌ Email config error:", error.message);
-  } else {
-    console.log("✅ Email service ready");
+  if (!user || !pass) {
+    console.warn("⚠️ Email ENV not loaded (EMAIL_USER / EMAIL_PASS missing)");
+    return null;
   }
-});
+
+  return nodemailer.createTransport({
+    service: "gmail",
+    auth: {
+      user,
+      pass,
+    },
+    connectionTimeout: 5000,
+  });
+};
+
+// ================= VERIFY CONNECTION (SAFE) =================
+export const verifyEmailService = async () => {
+  try {
+    const transporter = createTransporter();
+    if (!transporter) return;
+
+    await transporter.verify();
+    console.log("✅ Email service ready");
+  } catch (error) {
+    console.error("❌ Email config error:", error.message);
+  }
+};
 
 // ================= MAIN FUNCTION =================
 export const sendEmailAlert = async (alert) => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.warn("⚠️ Email config missing — skipping email alert");
-      return;
-    }
+    const transporter = createTransporter();
+    if (!transporter) return;
 
     if (!alert) {
       console.warn("⚠️ No alert data provided");
@@ -77,7 +89,7 @@ Time: ${timestamp}
 
     // ================= SEND =================
     await transporter.sendMail({
-      from: `"ThreatOps" <${process.env.EMAIL_USER}>`,
+      from: `"ThreatOps Alerts" <${process.env.EMAIL_USER}>`,
       to: receiver,
       subject,
       text,
@@ -91,7 +103,7 @@ Time: ${timestamp}
   }
 };
 
-// ================= SANITIZE ==========
+// ================= SANITIZE =================
 const sanitize = (value) => {
   if (!value) return "";
   return String(value).replace(/[<>]/g, "");

@@ -8,12 +8,15 @@ import logsRoutes from "./routes/logs.routes.js";
 import alertRoutes from "./routes/alerts.routes.js";
 import alertsController from "./controllers/alerts.controller.js";
 import { authMiddleware } from "./middlewares/auth.middleware.js";
+import { attachIO } from "./middlewares/socket.js";
 
 
 const app = express();
 
 // ================= SECURITY =================
 app.use(helmet());
+
+app.use(attachIO);
 
 app.use(cors({
   origin: ["http://localhost:5173", "http://localhost:5174"],

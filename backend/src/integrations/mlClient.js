@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
  */
 const analyzeThreat = async (logData) => {
   try {
-    const mlUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5001/api/v1/predict';
+    const mlUrl = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5000/api/v1/predict';
 
     const payload = {
       ip: logData.sourceIp || logData.ip || '0.0.0.0',

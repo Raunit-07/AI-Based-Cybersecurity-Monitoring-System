@@ -2,35 +2,35 @@ import React from "react";
 import { TrafficChart } from "../components/TrafficChart";
 import { AlertsList } from "../components/AlertsList";
 import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
-import { useAlerts, useSuspiciousIPs } from "../hooks/useThreatData";
+
+import useAlerts from "../hooks/useAlerts"; // ✅ REAL-TIME SOCKET
+import { useSuspiciousIPs } from "../hooks/useThreatData";
 import { useLiveTraffic } from "../hooks/useLiveTraffic";
+
 import { Shield, AlertTriangle, Activity, Database } from "lucide-react";
 
+// ================= MAIN COMPONENT =================
 export const Dashboard = () => {
-  const { data: alerts = [], isLoading: isLoadingAlerts } = useAlerts();
+  // 🔥 REAL-TIME ALERTS (Socket)
+  const { alerts, stats } = useAlerts();
+
+  // 📊 OTHER DATA (API)
   const { data: ips = [], isLoading: isLoadingIPs } = useSuspiciousIPs();
   const { trafficData = [], isConnected } = useLiveTraffic();
 
-  // ✅ SAFE ARRAY
+  // ================= SAFE DATA =================
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
-
-  // ✅ FIXED (no status field in DB)
-  const criticalAlerts = safeAlerts.filter(
-    (a) => a.severity === "critical" || a.severity === "high"
-  ).length;
-
-  const activeThreats = criticalAlerts;
+  const safeIPs = Array.isArray(ips) ? ips : [];
 
   const currentRequests =
     trafficData.length > 0
-      ? trafficData[trafficData.length - 1].requests
+      ? trafficData[trafficData.length - 1]?.requests || 0
       : 0;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-black">
-      {/* Content container with z-index: 10 */}
       <div className="relative z-10 p-6 space-y-6">
-        {/* HEADER */}
+        {/* ================= HEADER ================= */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">System Overview</h1>
@@ -41,27 +41,26 @@ export const Dashboard = () => {
 
           <div className="flex items-center gap-2 px-3 py-1.5 bg-surface rounded-full border border-gray-800 text-sm">
             <div
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-green-500" : "bg-red-500"
-              }`}
-            ></div>
+              className={`w-2 h-2 rounded-full ${isConnected ? "bg-green-500" : "bg-red-500"
+                }`}
+            />
             <span className="text-gray-300">
               {isConnected ? "System Online" : "Disconnected"}
             </span>
           </div>
         </div>
 
-        {/* STATS */}
+        {/* ================= STATS ================= */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             title="Active Threats"
-            value={activeThreats}
+            value={stats.activeThreats}
             icon={<Shield className="w-6 h-6 text-yellow-400" />}
           />
 
           <StatCard
             title="Critical Alerts"
-            value={criticalAlerts}
+            value={stats.criticalAlerts}
             icon={<AlertTriangle className="w-6 h-6 text-red-500" />}
           />
 
@@ -73,32 +72,30 @@ export const Dashboard = () => {
 
           <StatCard
             title="Monitored IPs"
-            value={ips.length}
+            value={safeIPs.length}
             icon={<Database className="w-6 h-6 text-green-400" />}
           />
         </div>
 
-        {/* MAIN GRID */}
+        {/* ================= MAIN GRID ================= */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* TRAFFIC CHART */}
           <div className="lg:col-span-2">
-            <TrafficChart data={trafficData} />
+            <TrafficChart data={trafficData || []} />
           </div>
 
-          <div className="h-[400px]">
-            {isLoadingAlerts ? (
-              <Loader />
-            ) : (
-              <AlertsList alerts={safeAlerts} limit={6} />
-            )}
+          {/* ALERTS */}
+          <div className="h-[400px] overflow-hidden">
+            <AlertsList alerts={safeAlerts} limit={6} />
           </div>
         </div>
 
-        {/* IP TABLE */}
+        {/* ================= IP TABLE ================= */}
         <div className="w-full">
           {isLoadingIPs ? (
             <Loader />
           ) : (
-            <SuspiciousIPsTable ips={ips} />
+            <SuspiciousIPsTable ips={safeIPs} />
           )}
         </div>
       </div>
@@ -111,7 +108,9 @@ const StatCard = ({ title, value, icon }) => (
   <div className="bg-surface border border-gray-800 rounded-xl p-6 flex justify-between">
     <div>
       <p className="text-gray-400 text-sm">{title}</p>
-      <h3 className="text-3xl font-bold text-white">{value}</h3>
+      <h3 className="text-3xl font-bold text-white">
+        {value ?? 0}
+      </h3>
     </div>
     <div className="p-3 bg-gray-800 rounded-lg">{icon}</div>
   </div>

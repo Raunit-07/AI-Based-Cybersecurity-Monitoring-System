@@ -1,46 +1,93 @@
-import { useState, useEffect } from 'react';
-import { socket } from '../services/socket';
-import { useQueryClient } from '@tanstack/react-query';
+import { useState, useEffect, useRef } from "react";
+import { getSocket } from "../services/socket";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const useLiveTraffic = () => {
   const [trafficData, setTrafficData] = useState([]);
-  const [isConnected, setIsConnected] = useState(socket.connected);
+  const [isConnected, setIsConnected] = useState(false);
+
   const queryClient = useQueryClient();
+  const socketRef = useRef(null); // ✅ prevent duplicate listeners
 
   useEffect(() => {
-    socket.connect();
+    const socket = getSocket();
 
-    const onConnect = () => setIsConnected(true);
-    const onDisconnect = () => setIsConnected(false);
-    
-    const onTrafficUpdate = (data) => {
-      setTrafficData((prev) => {
-        const newData = [...prev, data];
-        if (newData.length > 20) newData.shift(); // Keep last 20 data points
-        return newData;
-      });
+    if (!socket) {
+      console.error("❌ Socket instance not available");
+      return;
+    }
+
+    socketRef.current = socket;
+
+    // ================= CONNECTION =================
+    const handleConnect = () => {
+      setIsConnected(true);
+      console.log("✅ Socket connected:", socket.id);
     };
 
-    const onNewAlert = (alert) => {
-      queryClient.setQueryData(['alerts'], (oldData) => {
-        if (!oldData) return [alert];
-        return [alert, ...oldData].slice(0, 50); // Keep max 50 alerts
-      });
+    const handleDisconnect = (reason) => {
+      setIsConnected(false);
+      console.warn("⚠️ Socket disconnected:", reason);
     };
 
-    socket.on('connect', onConnect);
-    socket.on('disconnect', onDisconnect);
-    socket.on('traffic_update', onTrafficUpdate);
-    socket.on('new_alert', onNewAlert);
+    // ================= TRAFFIC =================
+    const handleTrafficUpdate = (data) => {
+      try {
+        const safeRequests = Number(data?.requests) || 0;
 
+        setTrafficData((prev) => {
+          const updated = [
+            ...prev.slice(-19), // keep last 20 points
+            {
+              time: Date.now(),
+              requests: safeRequests,
+            },
+          ];
+          return updated;
+        });
+      } catch (err) {
+        console.error("❌ Traffic update error:", err);
+      }
+    };
+
+    // ================= ALERTS =================
+    const handleNewAlert = (alert) => {
+      try {
+        if (!alert || typeof alert !== "object") return;
+
+        queryClient.setQueryData(["alerts"], (oldData) => {
+          const safeOld = Array.isArray(oldData) ? oldData : [];
+          return [alert, ...safeOld].slice(0, 50);
+        });
+      } catch (err) {
+        console.error("❌ Alert update error:", err);
+      }
+    };
+
+    // ================= REGISTER EVENTS =================
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("traffic_update", handleTrafficUpdate);
+    socket.on("new_alert", handleNewAlert);
+
+    // ================= INITIAL STATE =================
+    if (socket.connected) {
+      setIsConnected(true);
+    }
+
+    // ================= CLEANUP =================
     return () => {
-      socket.off('connect', onConnect);
-      socket.off('disconnect', onDisconnect);
-      socket.off('traffic_update', onTrafficUpdate);
-      socket.off('new_alert', onNewAlert);
-      socket.disconnect();
+      if (!socketRef.current) return;
+
+      socketRef.current.off("connect", handleConnect);
+      socketRef.current.off("disconnect", handleDisconnect);
+      socketRef.current.off("traffic_update", handleTrafficUpdate);
+      socketRef.current.off("new_alert", handleNewAlert);
     };
   }, [queryClient]);
 
-  return { trafficData, isConnected };
+  return {
+    trafficData,
+    isConnected,
+  };
 };
