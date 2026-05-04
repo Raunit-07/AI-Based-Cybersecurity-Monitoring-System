@@ -25,7 +25,11 @@ let socket = null;
 export const getSocket = () => {
   if (!socket) {
     socket = io(BASE_URL, {
-      path: "/socket.io", // must match backend 
+      path: "/socket.io",
+
+      // 🔥 CRITICAL FIX (MATCH BACKEND)
+      transports: ["websocket"],
+
       withCredentials: true,
 
       // 🔁 Reconnection strategy
@@ -72,7 +76,7 @@ export const isSocketConnected = () => {
 // ================= CLEAN DISCONNECT =================
 export const disconnectSocket = () => {
   if (socket) {
-    socket.removeAllListeners(); // prevent memory leaks
+    socket.removeAllListeners();
     socket.disconnect();
     socket = null;
     console.log("🛑 Socket disconnected cleanly");

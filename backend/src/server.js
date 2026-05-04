@@ -28,7 +28,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["websocket", "polling"],
+  transports: ["websocket"], // production optimized
   pingTimeout: 60000,
   pingInterval: 25000,
 });
@@ -42,7 +42,7 @@ io.use((socket, next) => {
       socket.handshake.auth?.token ||
       socket.handshake.headers?.authorization?.split(" ")[1];
 
-    // Enable later if needed
+    // Optional: enable later
     // if (!token) return next(new Error("Unauthorized"));
 
     next();
@@ -58,10 +58,6 @@ io.use((socket, next) => {
 io.on("connection", (socket) => {
   logger.info(`✅ Socket connected: ${socket.id}`);
 
-  // Debug handshake
-  logger.info("🔥 Handshake headers:", socket.handshake.headers);
-  logger.info("🌐 Origin:", socket.handshake.headers.origin);
-
   socket.on("ping", () => {
     socket.emit("pong");
   });
@@ -74,6 +70,30 @@ io.on("connection", (socket) => {
     logger.error(`❌ Socket error (${socket.id}): ${err.message}`);
   });
 });
+
+/**
+ * ================= 🔥 DEBUG EMITTER (TEMPORARY) =================
+ * This proves your frontend + socket is working
+ */
+if (process.env.NODE_ENV !== "production") {
+  setInterval(() => {
+    const traffic = Math.floor(Math.random() * 500);
+
+    logger.info("🔥 Emitting test data...");
+
+    io.emit("traffic_update", {
+      requests: traffic,
+    });
+
+    io.emit("new_alert", {
+      ip: "192.168.1.1",
+      attack_type: "ddos",
+      anomaly_score: 0.9,
+      timestamp: new Date(),
+    });
+
+  }, 5000);
+}
 
 /**
  * ================= ATTACH IO TO APP =================
