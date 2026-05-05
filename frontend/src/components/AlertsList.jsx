@@ -99,7 +99,7 @@ export const AlertsList = ({ alerts = [], limit }) => {
                       </span>
 
                       <span className="whitespace-nowrap ml-2">
-                        {formatTime(alert.time)}
+                        {formatTime(alert.timestamp)}
                       </span>
                     </div>
                   </div>

@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
+import rateLimit from "express-rate-limit";
+import mongoSanitize from "express-mongo-sanitize";
+import compression from "compression";
+import hpp from "hpp";
 
 import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
@@ -13,36 +17,71 @@ import { attachIO } from "./middlewares/socket.js";
 
 const app = express();
 
+// ================= BASIC SETTINGS =================
+app.set("trust proxy", 1);
+
 // ================= SECURITY =================
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
-// 🔥 Attach Socket.IO middleware FIRST
-app.use(attachIO);
+// Prevent NoSQL injection
+app.use(mongoSanitize());
 
-// ================= CORS =================
+// Prevent HTTP parameter pollution
+app.use(hpp());
+
+// ================= CORS (FIXED PROPERLY) =================
+const allowedOrigins = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+];
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: function (origin, callback) {
+      // allow requests with no origin (mobile apps, Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      } else {
+        return callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   })
 );
 
+// 🔥 Handle preflight requests (VERY IMPORTANT)
+app.options(/.*/, cors());
+
 // ================= BODY PARSING =================
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
-// ================= BASIC SANITIZATION =================
-app.use((req, res, next) => {
-  if (req.body && typeof req.body === "object") {
-    for (let key in req.body) {
-      if (key.startsWith("$") || key.includes(".")) {
-        delete req.body[key];
-      }
-    }
-  }
-  next();
+// ================= PERFORMANCE =================
+app.use(compression());
+
+// ================= RATE LIMIT =================
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: "Too many requests, please try again later",
+  },
 });
+
+app.use("/api", limiter);
+
+// ================= SOCKET.IO =================
+app.use(attachIO);
 
 // ================= HEALTH =================
 app.get("/", (req, res) => {
@@ -54,13 +93,15 @@ app.use("/api/auth", authRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/alerts", alertRoutes);
 
-// 🔥 Protected route
+// Protected route
 app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 
 // ================= DEBUG =================
-app.get("/test", (req, res) => {
-  res.send("TEST OK");
-});
+if (process.env.NODE_ENV !== "production") {
+  app.get("/test", (req, res) => {
+    res.send("TEST OK");
+  });
+}
 
 // ================= 404 =================
 app.use((req, res) => {
@@ -76,7 +117,10 @@ app.use((err, req, res, next) => {
 
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || "Internal Server Error",
+    message:
+      process.env.NODE_ENV === "production"
+        ? "Internal Server Error"
+        : err.message,
   });
 });
 

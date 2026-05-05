@@ -1,6 +1,5 @@
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
-import User from "../models/User.js";
+import User from "../models/user.js"; // ✅ fixed path
 import logger from "../utils/logger.js";
 
 // ================= TOKEN GENERATION =================
@@ -23,30 +22,38 @@ const generateTokens = (userId, role) => {
 };
 
 // ================= REGISTER =================
-const registerUser = async (username, password, role = "user") => {
-  const existingUser = await User.findOne({ username });
+const registerUser = async (email, password, role = "user") => {
+  email = email.toLowerCase().trim();
+
+  const existingUser = await User.findOne({ email });
 
   if (existingUser) {
-    const error = new Error("Username already exists");
+    const error = new Error("User already exists");
     error.status = 400;
     throw error;
   }
 
-  // Password will be hashed by the pre-save hook in User model
   const user = new User({
-    username,
+    email,
     password,
-    role
+    role,
   });
 
   await user.save();
 
-  return user;
+  return {
+    id: user._id,
+    email: user.email,
+    role: user.role,
+  };
 };
 
 // ================= LOGIN =================
-const loginUser = async (username, password) => {
-  const user = await User.findOne({ username }).select("+password +refreshToken");
+const loginUser = async (email, password) => {
+  email = email.toLowerCase().trim();
+
+  // 🔥 IMPORTANT: include password explicitly
+  const user = await User.findOne({ email }).select("+password +refreshToken");
 
   if (!user) {
     const error = new Error("Invalid credentials");
@@ -54,7 +61,6 @@ const loginUser = async (username, password) => {
     throw error;
   }
 
-  // Use the comparePassword method from User model
   const isMatch = await user.comparePassword(password);
 
   if (!isMatch) {
@@ -65,14 +71,20 @@ const loginUser = async (username, password) => {
 
   const { accessToken, refreshToken } = generateTokens(user._id, user.role);
 
-  // 🔥 PRODUCTION BEST PRACTICE: Use findByIdAndUpdate to update tokens 
-  // without triggering 'save' middleware (prevents any accidental re-hashing)
+  // Save refresh token safely
   await User.findByIdAndUpdate(user._id, { refreshToken });
 
-  // Add a non-sensitive log for successful login
-  logger.info(`Successful login for user: ${username}`);
+  logger.info(`User logged in: ${email}`);
 
-  return { user, accessToken, refreshToken };
+  return {
+    user: {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    },
+    accessToken,
+    refreshToken,
+  };
 };
 
 // ================= REFRESH TOKEN =================
@@ -107,7 +119,10 @@ const refreshAuthToken = async (token) => {
   user.refreshToken = newRefreshToken;
   await user.save();
 
-  return { accessToken, refreshToken: newRefreshToken };
+  return {
+    accessToken,
+    refreshToken: newRefreshToken,
+  };
 };
 
 // ================= LOGOUT =================

@@ -67,8 +67,8 @@ export const useLiveTraffic = () => {
         id: alert.id,
         type: alert.type,
         severity: alert.severity,
-        source: alert.source,
-        time: alert.time,
+        source: alert.ip,
+        time: alert.timestamp,
         status: "active",
       };
 
@@ -82,7 +82,7 @@ export const useLiveTraffic = () => {
     socket.on("connect", handleConnect);
     socket.on("disconnect", handleDisconnect);
     socket.on("traffic_update", handleTrafficUpdate);
-    socket.on("new_alert", handleNewAlert);
+    // socket.on("new_alert", handleNewAlert);
 
     // ================= INITIAL STATE =================
     if (socket.connected) {

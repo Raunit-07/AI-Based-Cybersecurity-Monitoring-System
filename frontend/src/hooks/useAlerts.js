@@ -173,7 +173,7 @@ const useAlerts = () => {
 
         // ================= SOCKET EVENTS =================
         socket.on("connect", handleConnect);
-        socket.on("new_alert", handleNewAlert);
+        // socket.on("new_alert", handleNewAlert);
         socket.on("traffic_update", handleTrafficUpdate);
 
         // ================= CLEANUP =================

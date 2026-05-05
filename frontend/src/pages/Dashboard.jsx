@@ -1,31 +1,89 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { TrafficChart } from "../components/TrafficChart";
 import { AlertsList } from "../components/AlertsList";
 import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
 
-import useAlerts from "../hooks/useAlerts"; // ✅ REAL-TIME SOCKET
+import { subscribeToAlerts } from "../services/socket";
+import { fetchAlerts } from "../services/api"; // ✅ NEW
 import { useSuspiciousIPs } from "../hooks/useThreatData";
-import { useLiveTraffic } from "../hooks/useLiveTraffic";
 
 import { Shield, AlertTriangle, Activity, Database } from "lucide-react";
 
 // ================= MAIN COMPONENT =================
 export const Dashboard = () => {
-  // 🔥 REAL-TIME ALERTS (Socket)
-  const { alerts, stats } = useAlerts();
+  const [alerts, setAlerts] = useState([]);
+  const [trafficData, setTrafficData] = useState([]);
+  const [isConnected, setIsConnected] = useState(false);
+  const [loadingAlerts, setLoadingAlerts] = useState(true);
 
-  // 📊 OTHER DATA (API)
+  // ================= LOAD ALERTS FROM BACKEND =================
+  useEffect(() => {
+    const loadAlerts = async () => {
+      try {
+        const data = await fetchAlerts();
+
+        if (Array.isArray(data)) {
+          setAlerts(data);
+        }
+      } catch (err) {
+        console.error("Failed to load alerts:", err);
+      } finally {
+        setLoadingAlerts(false);
+      }
+    };
+
+    loadAlerts();
+  }, []);
+
+  // ================= SOCKET ALERTS =================
+  useEffect(() => {
+    const unsubscribe = subscribeToAlerts((alert) => {
+      if (!alert || !alert.ip) return; // ✅ safety
+
+      setAlerts((prev) => {
+        // 🔥 Prevent duplicates (based on _id or timestamp+ip fallback)
+        const exists = prev.some(
+          (a) => a._id === alert._id || (a.ip === alert.ip && a.timestamp === alert.timestamp)
+        );
+
+        if (exists) return prev;
+
+        return [alert, ...prev].slice(0, 100);
+      });
+
+      setIsConnected(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // ================= SUSPICIOUS IPS =================
   const { data: ips = [], isLoading: isLoadingIPs } = useSuspiciousIPs();
-  const { trafficData = [], isConnected } = useLiveTraffic();
 
   // ================= SAFE DATA =================
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
   const safeIPs = Array.isArray(ips) ? ips : [];
 
+  // ================= STATS =================
+
+  const activeThreats = new Set(
+    safeAlerts
+      .filter(
+        (a) =>
+          a?.timestamp &&
+          Date.now() - new Date(a.timestamp).getTime() < 5 * 60 * 1000
+      )
+      .map((a) => a.ip)
+  ).size;
+
+  const criticalAlerts = safeAlerts.filter(
+    (a) => a?.anomalyScore !== undefined && a.anomalyScore < -0.7
+  ).length;
+
   const currentRequests =
     trafficData.length > 0
       ? trafficData[trafficData.length - 1]?.requests || 0
-      : 0;
+      : safeAlerts.length;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-black">
@@ -33,7 +91,9 @@ export const Dashboard = () => {
         {/* ================= HEADER ================= */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-white">System Overview</h1>
+            <h1 className="text-2xl font-bold text-white">
+              System Overview
+            </h1>
             <p className="text-gray-400 text-sm mt-1">
               Real-time threat monitoring and network analysis.
             </p>
@@ -54,13 +114,13 @@ export const Dashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             title="Active Threats"
-            value={stats.activeThreats}
+            value={activeThreats}
             icon={<Shield className="w-6 h-6 text-yellow-400" />}
           />
 
           <StatCard
             title="Critical Alerts"
-            value={stats.criticalAlerts}
+            value={criticalAlerts}
             icon={<AlertTriangle className="w-6 h-6 text-red-500" />}
           />
 
@@ -86,7 +146,11 @@ export const Dashboard = () => {
 
           {/* ALERTS */}
           <div className="h-[400px] overflow-hidden">
-            <AlertsList alerts={safeAlerts} limit={6} />
+            {loadingAlerts ? (
+              <Loader />
+            ) : (
+              <AlertsList alerts={safeAlerts} limit={6} />
+            )}
           </div>
         </div>
 

@@ -4,7 +4,26 @@ import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
-// GET all alerts
+/**
+ * ================= ALERT ROUTES =================
+ * All routes are protected (auth required)
+ */
+
+// ✅ Get alerts (pagination + filtering)
 router.get("/", authMiddleware, alertsController.getAlerts);
+
+// ✅ Resolve alert
+router.patch(
+    "/:id/resolve",
+    authMiddleware,
+    alertsController.resolveAlert
+);
+
+// ✅ Suspicious IPs
+router.get(
+    "/suspicious-ips",
+    authMiddleware,
+    alertsController.getSuspiciousIPs
+);
 
 export default router;

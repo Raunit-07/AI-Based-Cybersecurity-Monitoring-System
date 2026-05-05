@@ -3,7 +3,7 @@ import catchAsync from "../utils/catchAsync.js";
 import apiResponse from "../utils/apiResponse.js";
 
 /**
- * Cookie Configuration
+ * ================= COOKIE CONFIG =================
  */
 const getCookieOptions = () => {
   const isProduction = process.env.NODE_ENV === "production";
@@ -17,7 +17,7 @@ const getCookieOptions = () => {
 };
 
 /**
- * Set Access + Refresh Tokens
+ * ================= SET TOKENS =================
  */
 const setTokensInCookies = (res, accessToken, refreshToken) => {
   if (!accessToken || !refreshToken) {
@@ -26,21 +26,19 @@ const setTokensInCookies = (res, accessToken, refreshToken) => {
 
   const cookieOptions = getCookieOptions();
 
-  // Access Token
   res.cookie("accessToken", accessToken, {
     ...cookieOptions,
-    maxAge: 15 * 60 * 1000, // 15 min
+    maxAge: 15 * 60 * 1000,
   });
 
-  // Refresh Token
   res.cookie("refreshToken", refreshToken, {
     ...cookieOptions,
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000,
   });
 };
 
 /**
- * Clear Tokens
+ * ================= CLEAR TOKENS =================
  */
 const clearTokens = (res) => {
   const cookieOptions = getCookieOptions();
@@ -53,19 +51,23 @@ const clearTokens = (res) => {
  * ================= REGISTER =================
  */
 const register = catchAsync(async (req, res) => {
-  const { username, password, role } = req.body;
+  let { email, password, role } = req.body;
 
-  if (!username || !password) {
+  // Normalize input
+  email = email?.trim().toLowerCase();
+  password = password?.trim();
+
+  if (!email || !password) {
     return apiResponse(
       res,
       400,
       false,
       null,
-      "Username and password are required"
+      "Email and password are required"
     );
   }
 
-  const user = await authService.registerUser(username, password, role);
+  const user = await authService.registerUser(email, password, role);
 
   return apiResponse(
     res,
@@ -80,40 +82,34 @@ const register = catchAsync(async (req, res) => {
  * ================= LOGIN =================
  */
 const login = catchAsync(async (req, res) => {
-  const { email, username, password } = req.body;
+  let { email, password } = req.body;
 
-  const loginField = username || email;
+  email = email?.trim().toLowerCase();
+  password = password?.trim();
 
-  if (!loginField || typeof loginField !== "string" || !password) {
+  if (!email || !password) {
     return apiResponse(
       res,
       400,
       false,
       null,
-      "Valid login credentials required"
+      "Email and password required"
     );
   }
 
   let result;
 
   try {
-    result = await authService.loginUser(loginField, password);
+    result = await authService.loginUser(email, password);
   } catch (error) {
     if (error.status === 401) {
       return apiResponse(res, 401, false, null, "Invalid credentials");
     }
-
     throw error;
   }
 
   if (!result?.user || !result?.accessToken || !result?.refreshToken) {
-    return apiResponse(
-      res,
-      500,
-      false,
-      null,
-      "Authentication failed"
-    );
+    return apiResponse(res, 500, false, null, "Authentication failed");
   }
 
   const { user, accessToken, refreshToken } = result;
@@ -136,42 +132,18 @@ const refreshToken = catchAsync(async (req, res) => {
   const existingRefreshToken = req.cookies?.refreshToken;
 
   if (!existingRefreshToken) {
-    return apiResponse(
-      res,
-      401,
-      false,
-      null,
-      "Refresh token missing"
-    );
+    return apiResponse(res, 401, false, null, "Refresh token missing");
   }
 
-  const tokens = await authService.refreshAuthToken(
-    existingRefreshToken
-  );
+  const tokens = await authService.refreshAuthToken(existingRefreshToken);
 
   if (!tokens?.accessToken || !tokens?.refreshToken) {
-    return apiResponse(
-      res,
-      401,
-      false,
-      null,
-      "Invalid refresh token"
-    );
+    return apiResponse(res, 401, false, null, "Invalid refresh token");
   }
 
-  setTokensInCookies(
-    res,
-    tokens.accessToken,
-    tokens.refreshToken
-  );
+  setTokensInCookies(res, tokens.accessToken, tokens.refreshToken);
 
-  return apiResponse(
-    res,
-    200,
-    true,
-    {},
-    "Token refreshed successfully"
-  );
+  return apiResponse(res, 200, true, {}, "Token refreshed successfully");
 });
 
 /**
@@ -184,13 +156,7 @@ const logout = catchAsync(async (req, res) => {
 
   clearTokens(res);
 
-  return apiResponse(
-    res,
-    200,
-    true,
-    {},
-    "Logged out successfully"
-  );
+  return apiResponse(res, 200, true, {}, "Logged out successfully");
 });
 
 /**
@@ -198,13 +164,7 @@ const logout = catchAsync(async (req, res) => {
  */
 const getMe = catchAsync(async (req, res) => {
   if (!req.user) {
-    return apiResponse(
-      res,
-      401,
-      false,
-      null,
-      "Not authenticated"
-    );
+    return apiResponse(res, 401, false, null, "Not authenticated");
   }
 
   return apiResponse(
