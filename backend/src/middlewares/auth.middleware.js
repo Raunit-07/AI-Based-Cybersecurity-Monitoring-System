@@ -1,11 +1,12 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js";
+import User from "../models/user.js"; // ✅ FIXED PATH
 
 /**
- * Auth Middleware (Production Ready)
+ * ================= AUTH MIDDLEWARE =================
  * Supports:
- * 1. Cookie-based auth (accessToken)
- * 2. Bearer token (Authorization header)
+ * - Cookie-based auth
+ * - Bearer token auth
+ * - Production-safe validation
  */
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -29,6 +30,11 @@ export const authMiddleware = async (req, res, next) => {
       });
     }
 
+    // ================= VERIFY SECRET =================
+    if (!process.env.JWT_ACCESS_SECRET) {
+      throw new Error("JWT_ACCESS_SECRET not defined");
+    }
+
     // ================= VERIFY TOKEN =================
     let decoded;
     try {
@@ -37,6 +43,14 @@ export const authMiddleware = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "Unauthorized: Invalid or expired token",
+      });
+    }
+
+    // ================= VALIDATE PAYLOAD =================
+    if (!decoded?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: Invalid token payload",
       });
     }
 
@@ -51,15 +65,34 @@ export const authMiddleware = async (req, res, next) => {
     }
 
     // ================= ATTACH USER =================
-    req.user = user;
+    req.user = {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    };
 
     next();
   } catch (error) {
-    console.error("Auth middleware error:", error);
+    console.error("❌ Auth middleware error:", error.message);
 
     return res.status(500).json({
       success: false,
       message: "Server error in authentication",
     });
   }
+};
+
+/**
+ * ================= ROLE-BASED ACCESS =================
+ */
+export const authorizeRoles = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user?.role || !roles.includes(req.user.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Forbidden: Access denied",
+      });
+    }
+    next();
+  };
 };
