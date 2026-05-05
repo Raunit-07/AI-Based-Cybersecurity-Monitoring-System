@@ -53,7 +53,6 @@ const clearTokens = (res) => {
 const register = catchAsync(async (req, res) => {
   let { email, password, role } = req.body;
 
-  // Normalize input
   email = email?.trim().toLowerCase();
   password = password?.trim();
 
@@ -67,7 +66,11 @@ const register = catchAsync(async (req, res) => {
     );
   }
 
-  const user = await authService.registerUser(email, password, role);
+  const result = await authService.registerUser(email, password, role);
+
+  const { user, accessToken, refreshToken } = result;
+
+  setTokensInCookies(res, accessToken, refreshToken);
 
   return apiResponse(
     res,
@@ -108,10 +111,6 @@ const login = catchAsync(async (req, res) => {
     throw error;
   }
 
-  if (!result?.user || !result?.accessToken || !result?.refreshToken) {
-    return apiResponse(res, 500, false, null, "Authentication failed");
-  }
-
   const { user, accessToken, refreshToken } = result;
 
   setTokensInCookies(res, accessToken, refreshToken);
@@ -137,10 +136,6 @@ const refreshToken = catchAsync(async (req, res) => {
 
   const tokens = await authService.refreshAuthToken(existingRefreshToken);
 
-  if (!tokens?.accessToken || !tokens?.refreshToken) {
-    return apiResponse(res, 401, false, null, "Invalid refresh token");
-  }
-
   setTokensInCookies(res, tokens.accessToken, tokens.refreshToken);
 
   return apiResponse(res, 200, true, {}, "Token refreshed successfully");
@@ -163,10 +158,6 @@ const logout = catchAsync(async (req, res) => {
  * ================= CURRENT USER =================
  */
 const getMe = catchAsync(async (req, res) => {
-  if (!req.user) {
-    return apiResponse(res, 401, false, null, "Not authenticated");
-  }
-
   return apiResponse(
     res,
     200,

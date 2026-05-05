@@ -1,9 +1,13 @@
 import jwt from "jsonwebtoken";
-import User from "../models/user.js"; // ✅ fixed path
+import User from "../models/User.js"; // ✅ FIXED (lowercase)
 import logger from "../utils/logger.js";
 
 // ================= TOKEN GENERATION =================
 const generateTokens = (userId, role) => {
+  if (!process.env.JWT_ACCESS_SECRET || !process.env.JWT_REFRESH_SECRET) {
+    throw new Error("JWT secrets are not defined in .env");
+  }
+
   const payload = { id: userId, role };
 
   const accessToken = jwt.sign(
@@ -23,6 +27,12 @@ const generateTokens = (userId, role) => {
 
 // ================= REGISTER =================
 const registerUser = async (email, password, role = "user") => {
+  if (!email || !password) {
+    const error = new Error("Email and password are required");
+    error.status = 400;
+    throw error;
+  }
+
   email = email.toLowerCase().trim();
 
   const existingUser = await User.findOne({ email });
@@ -39,21 +49,37 @@ const registerUser = async (email, password, role = "user") => {
     role,
   });
 
+  // Save first → ensures DB consistency
+  await user.save();
+
+  const { accessToken, refreshToken } = generateTokens(user._id, user.role);
+
+  // Save refresh token
+  user.refreshToken = refreshToken;
   await user.save();
 
   return {
-    id: user._id,
-    email: user.email,
-    role: user.role,
+    user: {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    },
+    accessToken,
+    refreshToken,
   };
 };
 
 // ================= LOGIN =================
 const loginUser = async (email, password) => {
+  if (!email || !password) {
+    const error = new Error("Email and password required");
+    error.status = 400;
+    throw error;
+  }
+
   email = email.toLowerCase().trim();
 
-  // 🔥 IMPORTANT: include password explicitly
-  const user = await User.findOne({ email }).select("+password +refreshToken");
+  const user = await User.findOne({ email }).select("+password");
 
   if (!user) {
     const error = new Error("Invalid credentials");
@@ -71,7 +97,6 @@ const loginUser = async (email, password) => {
 
   const { accessToken, refreshToken } = generateTokens(user._id, user.role);
 
-  // Save refresh token safely
   await User.findByIdAndUpdate(user._id, { refreshToken });
 
   logger.info(`User logged in: ${email}`);

@@ -27,41 +27,41 @@ app.use(
   })
 );
 
-// Prevent NoSQL injection
-app.use(mongoSanitize());
-
-// Prevent HTTP parameter pollution
-app.use(hpp());
-
 // ================= CORS (FIXED PROPERLY) =================
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "http://localhost:5174",
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // allow requests with no origin (mobile apps, Postman)
-      if (!origin) return callback(null, true);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    }
+  },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+};
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
+app.use(cors(corsOptions));
 
-// 🔥 Handle preflight requests (VERY IMPORTANT)
-app.options(/.*/, cors());
+// 🔥 Regex-based preflight handling (Express v5 safe)
+app.options(/^(.*)$/, cors(corsOptions));
 
 // ================= BODY PARSING =================
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
+
+// Prevent NoSQL injection
+app.use(mongoSanitize());
+
+// Prevent HTTP parameter pollution
+app.use(hpp());
 
 // ================= PERFORMANCE =================
 app.use(compression());
@@ -113,14 +113,19 @@ app.use((req, res) => {
 
 // ================= GLOBAL ERROR HANDLER =================
 app.use((err, req, res, next) => {
-  console.error("❌ Error:", err.message);
+  const statusCode = err.status || 500;
+  const message = err.message || "Internal Server Error";
 
-  res.status(err.status || 500).json({
+  // Use logger if imported, otherwise console.error
+  console.error(`❌ Error: ${message}`);
+
+  res.status(statusCode).json({
     success: false,
+    data: null,
     message:
       process.env.NODE_ENV === "production"
         ? "Internal Server Error"
-        : err.message,
+        : message,
   });
 });
 

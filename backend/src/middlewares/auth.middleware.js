@@ -1,12 +1,8 @@
 import jwt from "jsonwebtoken";
-import User from "../models/user.js"; // ✅ FIXED PATH
+import User from "../models/User.js"; // ✅ FIXED (lowercase)
 
 /**
  * ================= AUTH MIDDLEWARE =================
- * Supports:
- * - Cookie-based auth
- * - Bearer token auth
- * - Production-safe validation
  */
 export const authMiddleware = async (req, res, next) => {
   try {
@@ -39,7 +35,7 @@ export const authMiddleware = async (req, res, next) => {
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    } catch (err) {
+    } catch {
       return res.status(401).json({
         success: false,
         message: "Unauthorized: Invalid or expired token",
@@ -73,7 +69,7 @@ export const authMiddleware = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("❌ Auth middleware error:", error.message);
+    console.error("❌ Auth middleware error:", error);
 
     return res.status(500).json({
       success: false,
