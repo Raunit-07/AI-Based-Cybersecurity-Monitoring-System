@@ -69,13 +69,17 @@ export const sendEmailAlert =
       }
 
       // ✅ IMPORTANT
-      // Prevent simulator crashes
+      // Simulator/logWatcher alerts have no user owner — skip silently
       if (
         !alert.recipientEmail
       ) {
-        console.warn(
-          "⚠️ No recipient email found for alert"
-        );
+        if (
+          process.env.NODE_ENV !== "production"
+        ) {
+          console.debug(
+            "📧 Skipping email — no recipient (expected for simulator traffic)"
+          );
+        }
 
         return;
       }
