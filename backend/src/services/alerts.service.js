@@ -111,7 +111,7 @@ const createAlert = async (
     const alert =
       await Alert.create({
         // ✅ USER OWNER
-        user: userId || null,
+        user: userId,
 
         ip,
 

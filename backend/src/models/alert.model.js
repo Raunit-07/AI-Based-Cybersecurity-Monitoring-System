@@ -6,11 +6,11 @@ const alertSchema = new mongoose.Schema(
     // ================= ALERT OWNER =================
     user: {
       type: mongoose.Schema.Types.ObjectId,
-
       ref: "User",
-
+      required: true,
       index: true,
     },
+
     // ================= SOURCE IP =================
     ip: {
       type: String,
@@ -79,14 +79,19 @@ const alertSchema = new mongoose.Schema(
     severity: {
       type: String,
 
-      enum: ["low", "medium", "high", "critical"],
+      enum: [
+        "low",
+        "medium",
+        "high",
+        "critical",
+      ],
 
       default: "medium",
       required: true,
       index: true,
     },
 
-    // ================= HUMAN READABLE MESSAGE =================
+    // ================= HUMAN MESSAGE =================
     message: {
       type: String,
       trim: true,
@@ -100,17 +105,21 @@ const alertSchema = new mongoose.Schema(
       default: "",
     },
 
-    // ================= ALERT STATUS =================
+    // ================= STATUS =================
     status: {
       type: String,
 
-      enum: ["active", "investigating", "resolved"],
+      enum: [
+        "active",
+        "investigating",
+        "resolved",
+      ],
 
       default: "active",
       index: true,
     },
 
-    // ================= RESOLUTION FLAG =================
+    // ================= RESOLVED FLAG =================
     resolved: {
       type: Boolean,
       default: false,
@@ -170,7 +179,16 @@ const alertSchema = new mongoose.Schema(
 );
 
 // ================= PERFORMANCE INDEXES =================
-alertSchema.index({ ip: 1, createdAt: -1 });
+alertSchema.index({
+  user: 1,
+  createdAt: -1,
+});
+
+alertSchema.index({
+  user: 1,
+  ip: 1,
+  createdAt: -1,
+});
 
 alertSchema.index({
   severity: 1,
@@ -188,17 +206,21 @@ alertSchema.index({
 });
 
 // ================= SAFE JSON OUTPUT =================
-alertSchema.methods.toJSON = function () {
-  const obj = this.toObject();
+alertSchema.methods.toJSON =
+  function () {
+    const obj = this.toObject();
 
-  delete obj.__v;
+    delete obj.__v;
 
-  return obj;
-};
+    return obj;
+  };
 
 // ================= SAFE MODEL EXPORT =================
 const Alert =
   mongoose.models.Alert ||
-  mongoose.model("Alert", alertSchema);
+  mongoose.model(
+    "Alert",
+    alertSchema
+  );
 
 export default Alert;

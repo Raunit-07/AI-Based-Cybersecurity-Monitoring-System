@@ -1,3 +1,6 @@
+// import dotenv from "dotenv";
+// dotenv.config();
+
 const axios = require("axios");
 
 const API_URL = "https://threatops-backend.onrender.com/api/logs"; // Docker internal URL
@@ -41,7 +44,8 @@ async function sendLog(isAnomaly = false) {
   try {
     const res = await axios.post(API_URL, payload, {
       headers: {
-        "x-api-key": "raunit_super_secure_key_123",
+        "x-api-key": process.env.LOG_API_KEY || "raunit_super_secure_key_123",
+        "Content-Type": "application/json",
       },
     });
 
