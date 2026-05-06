@@ -1,41 +1,102 @@
 import Alert from "../models/alert.model.js";
+import User from "../models/User.js";
+
 import { sendSlackAlert } from "../integrations/slack.js";
 import { sendEmailAlert } from "../integrations/email.js";
+
 import validator from "validator";
 
 // ================= UTILS =================
-const normalizeAttackType = (type) => {
-  if (!type) return "Suspicious";
-  const t = String(type).toLowerCase().trim();
-  if (t.includes("ddos")) return "DDoS";
-  if (t.includes("brute") || t.includes("force")) return "Brute Force";
-  if (t.includes("scan") || t.includes("port")) return "Port Scan";
-  if (t.includes("sql") || t.includes("inject")) return "SQL Injection";
-  if (t.includes("xss")) return "XSS";
-  if (t.includes("malware")) return "Malware";
-  if (t.includes("suspicious")) return "Suspicious";
-  if (t.includes("normal")) return "Normal";
+const normalizeAttackType = (
+  type
+) => {
+  if (!type)
+    return "Suspicious";
+
+  const t = String(type)
+    .toLowerCase()
+    .trim();
+
+  if (t.includes("ddos"))
+    return "DDoS";
+
+  if (
+    t.includes("brute") ||
+    t.includes("force")
+  )
+    return "Brute Force";
+
+  if (
+    t.includes("scan") ||
+    t.includes("port")
+  )
+    return "Port Scan";
+
+  if (
+    t.includes("sql") ||
+    t.includes("inject")
+  )
+    return "SQL Injection";
+
+  if (t.includes("xss"))
+    return "XSS";
+
+  if (t.includes("malware"))
+    return "Malware";
+
+  if (
+    t.includes("suspicious")
+  )
+    return "Suspicious";
+
+  if (t.includes("normal"))
+    return "Normal";
+
   return "Suspicious";
 };
 
 // ================= CREATE ALERT =================
-const createAlert = async (alertData = {}, io = null) => {
+const createAlert = async (
+  alertData = {},
+  io = null,
+  userId = null
+) => {
   try {
     // 🔒 VALIDATION
-    if (!alertData.ip || !validator.isIP(String(alertData.ip))) {
-      throw new Error("Invalid or missing IP address");
+    if (
+      !alertData.ip ||
+      !validator.isIP(
+        String(alertData.ip)
+      )
+    ) {
+      throw new Error(
+        "Invalid or missing IP address"
+      );
     }
 
     // 🔒 SANITIZE INPUT
-    const ip = String(alertData.ip).trim();
-    const anomalyScore = Number(alertData.anomalyScore ?? 0);
-    const attackType = normalizeAttackType(alertData.attackType);
+    const ip = String(
+      alertData.ip
+    ).trim();
 
-    // normalize type for your system (backward compatibility)
+    const anomalyScore = Number(
+      alertData.anomalyScore ??
+      0
+    );
+
+    const attackType =
+      normalizeAttackType(
+        alertData.attackType
+      );
+
+    // normalize type
     const normalizedType =
-      attackType.toLowerCase().replace(/\s+/g, "") || "unknown";
+      attackType
+        .toLowerCase()
+        .replace(/\s+/g, "") ||
+      "unknown";
 
-    // 🔥 AUTO SEVERITY BASED ON ML SCORE
+    // 🔥 AUTO SEVERITY
     const severity =
       alertData.severity ||
       (anomalyScore < -0.8
@@ -46,94 +107,215 @@ const createAlert = async (alertData = {}, io = null) => {
             ? "medium"
             : "low");
 
-    // ✅ SAVE ALERT
-    const alert = await Alert.create({
-      ip,
-      anomalyScore,
-      attackType,
+    // ================= CREATE ALERT =================
+    const alert =
+      await Alert.create({
+        // ✅ USER OWNER
+        user: userId || null,
 
-      // keep backward compatibility
-      type: alertData.type || normalizedType,
-      severity,
+        ip,
 
-      meta: {
-        requests: alertData.requests || 0,
-        failedLogins: alertData.failedLogins || 0,
-      },
+        anomalyScore,
 
-      timestamp: alertData.timestamp || new Date(),
-    });
+        attackType,
 
-    // ✅ SOCKET EMIT AFTER DB SAVE
+        // backward compatibility
+        type:
+          alertData.type ||
+          normalizedType,
+
+        severity,
+
+        meta: {
+          requests:
+            alertData.requests ||
+            0,
+
+          failedLogins:
+            alertData.failedLogins ||
+            0,
+        },
+
+        timestamp:
+          alertData.timestamp ||
+          new Date(),
+      });
+
+    // ================= SOCKET EMIT =================
     if (io) {
       io.emit("new_alert", {
         id: alert._id,
+
+        user: alert.user,
+
         ip: alert.ip,
-        attackType: alert.attackType,
-        anomalyScore: alert.anomalyScore,
-        severity: alert.severity,
-        timestamp: alert.timestamp,
-        meta: alert.meta
+
+        attackType:
+          alert.attackType,
+
+        anomalyScore:
+          alert.anomalyScore,
+
+        severity:
+          alert.severity,
+
+        timestamp:
+          alert.timestamp,
+
+        meta: alert.meta,
+      });
+
+      io.emit("traffic_update", {
+        timestamp: new Date(),
+
+        requests:
+          alert.meta?.requests || 0,
+
+        blocked:
+          alert.severity ===
+            "critical"
+            ? 1
+            : 0,
+
+        ip: alert.ip,
+
+        attackType:
+          alert.attackType,
       });
     }
 
-    // 🔥 SAFE ALERT INTEGRATIONS
-    if (["high", "critical"].includes(alert.severity)) {
-      await Promise.allSettled([
-        sendSlackAlert(alert),
-        sendEmailAlert(alert),
-      ]);
+    // ================= ALERT INTEGRATIONS =================
+    if (
+      ["high", "critical"].includes(
+        alert.severity
+      )
+    ) {
+      try {
+        // ✅ FIND ALERT OWNER
+        let user = null;
+
+        if (alert.user) {
+          user =
+            await User.findById(
+              alert.user
+            ).lean();
+        }
+
+        await Promise.allSettled([
+          // Slack
+          sendSlackAlert(alert),
+
+          // Email to alert owner
+          sendEmailAlert({
+            ...alert.toObject(),
+
+            recipientEmail:
+              user?.email || null,
+          }),
+        ]);
+      } catch (integrationError) {
+        console.error(
+          "❌ Alert integration error:",
+          integrationError.message
+        );
+      }
     }
 
     return alert;
   } catch (error) {
-    console.error("❌ createAlert error:", error.message);
+    console.error(
+      "❌ createAlert error:",
+      error.message
+    );
+
     throw error;
   }
 };
 
 // ================= GET ALERTS =================
-const getAlerts = async (query = {}, options = {}) => {
+const getAlerts = async (
+  query = {},
+  options = {}
+) => {
   try {
-    const limit = Math.min(Number(options.limit) || 50, 100);
-    const skip = Math.max(Number(options.skip) || 0, 0);
+    const limit = Math.min(
+      Number(options.limit) ||
+      50,
+      100
+    );
 
-    const alerts = await Alert.find(query)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const skip = Math.max(
+      Number(options.skip) || 0,
+      0
+    );
 
-    const total = await Alert.countDocuments(query);
+    const alerts =
+      await Alert.find(query)
+        .sort({
+          createdAt: -1,
+        })
+        .skip(skip)
+        .limit(limit)
+        .lean();
+
+    const total =
+      await Alert.countDocuments(
+        query
+      );
 
     return {
       success: true,
+
       data: alerts,
+
       total,
     };
   } catch (error) {
-    console.error("❌ getAlerts error:", error.message);
+    console.error(
+      "❌ getAlerts error:",
+      error.message
+    );
+
     throw error;
   }
 };
 
 // ================= RESOLVE ALERT =================
-const resolveAlert = async (alertId) => {
+const resolveAlert = async (
+  alertId
+) => {
   try {
-    if (!alertId) throw new Error("Alert ID required");
+    if (!alertId) {
+      throw new Error(
+        "Alert ID required"
+      );
+    }
 
-    const alert = await Alert.findByIdAndUpdate(
-      alertId,
-      { resolved: true },
-      { new: true }
-    );
+    const alert =
+      await Alert.findByIdAndUpdate(
+        alertId,
+        {
+          resolved: true,
+        },
+        {
+          new: true,
+        }
+      );
 
     return alert;
   } catch (error) {
-    console.error("❌ resolveAlert error:", error.message);
+    console.error(
+      "❌ resolveAlert error:",
+      error.message
+    );
+
     throw error;
   }
 };
 
 // ================= EXPORTS =================
-export { createAlert, getAlerts, resolveAlert };
+export {
+  createAlert,
+  getAlerts,
+  resolveAlert,
+};

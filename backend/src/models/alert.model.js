@@ -3,6 +3,14 @@ import validator from "validator";
 
 const alertSchema = new mongoose.Schema(
   {
+    // ================= ALERT OWNER =================
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+
+      ref: "User",
+
+      index: true,
+    },
     // ================= SOURCE IP =================
     ip: {
       type: String,
