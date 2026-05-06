@@ -39,7 +39,6 @@ const alertSchema = new mongoose.Schema(
         "SQL Injection",
         "XSS",
         "Malware",
-        "Suspicious Traffic",
         "Suspicious",
         "Normal",
       ],

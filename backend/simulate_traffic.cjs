@@ -54,7 +54,8 @@ async function sendLog(isAnomaly = false) {
       payload.failedLogins
     );
   } catch (err) {
-    console.error("❌ Error:", err.response?.data || err.message);
+    const errorMsg = err.response?.data?.message || err.response?.data || err.message;
+    console.error("❌ Error:", errorMsg);
   }
 }
 

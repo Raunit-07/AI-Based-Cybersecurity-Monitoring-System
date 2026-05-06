@@ -65,8 +65,17 @@ const logSchema = new mongoose.Schema(
 
     attackType: {
       type: String,
-      enum: ["normal", "ddos", "bruteforce", "suspicious"],
-      default: "normal",
+      enum: [
+        "DDoS",
+        "Brute Force",
+        "Port Scan",
+        "SQL Injection",
+        "XSS",
+        "Malware",
+        "Suspicious",
+        "Normal",
+      ],
+      default: "Normal",
       index: true, // 🔥 important for analytics
     },
   },

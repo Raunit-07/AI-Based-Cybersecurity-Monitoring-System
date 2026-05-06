@@ -2,6 +2,21 @@ import Log from "../models/log.model.js";
 import { createAlert } from "./alerts.service.js";
 import { detectThreat } from "./mlClient.js";
 
+// ================= UTILS =================
+const normalizeAttackType = (type) => {
+  if (!type) return "Normal";
+  const t = String(type).toLowerCase().trim();
+  if (t.includes("ddos")) return "DDoS";
+  if (t.includes("brute") || t.includes("force")) return "Brute Force";
+  if (t.includes("scan") || t.includes("port")) return "Port Scan";
+  if (t.includes("sql") || t.includes("inject")) return "SQL Injection";
+  if (t.includes("xss")) return "XSS";
+  if (t.includes("malware")) return "Malware";
+  if (t.includes("suspicious")) return "Suspicious";
+  if (t.includes("normal")) return "Normal";
+  return "Suspicious";
+};
+
 // ================= VALIDATION =================
 const sanitizeLogData = (data) => {
   return {
@@ -78,16 +93,22 @@ const processLog = async (logData, io) => {
 
     const anomalyScore = Number(prediction.anomaly_score) || 0;
 
-    const attackType =
-      cleanData.failedLogins > 10
-        ? "Brute Force"
-        : cleanData.requests > 800
-          ? "DDoS"
-          : prediction.attackType || "Suspicious";
+    let rawAttackType = "Normal";
+    if (cleanData.failedLogins > 10) {
+      rawAttackType = "Brute Force";
+    } else if (cleanData.requests > 800) {
+      rawAttackType = "DDoS";
+    } else if (prediction.attackType && prediction.attackType !== "normal") {
+      rawAttackType = prediction.attackType;
+    } else if (isAnomaly) {
+      rawAttackType = "Suspicious";
+    }
+
+    const attackType = normalizeAttackType(rawAttackType);
 
     const severity = getSeverity(cleanData, {
       ...prediction,
-      attackType: attackType.toLowerCase(),
+      attackType: attackType.toLowerCase().replace(/\s+/g, ""),
     });
 
     // ================= SAVE LOG =================

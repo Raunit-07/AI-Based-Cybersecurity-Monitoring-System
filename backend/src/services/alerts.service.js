@@ -3,6 +3,21 @@ import { sendSlackAlert } from "../integrations/slack.js";
 import { sendEmailAlert } from "../integrations/email.js";
 import validator from "validator";
 
+// ================= UTILS =================
+const normalizeAttackType = (type) => {
+  if (!type) return "Suspicious";
+  const t = String(type).toLowerCase().trim();
+  if (t.includes("ddos")) return "DDoS";
+  if (t.includes("brute") || t.includes("force")) return "Brute Force";
+  if (t.includes("scan") || t.includes("port")) return "Port Scan";
+  if (t.includes("sql") || t.includes("inject")) return "SQL Injection";
+  if (t.includes("xss")) return "XSS";
+  if (t.includes("malware")) return "Malware";
+  if (t.includes("suspicious")) return "Suspicious";
+  if (t.includes("normal")) return "Normal";
+  return "Suspicious";
+};
+
 // ================= CREATE ALERT =================
 const createAlert = async (alertData = {}, io = null) => {
   try {
@@ -13,12 +28,10 @@ const createAlert = async (alertData = {}, io = null) => {
 
     // 🔒 SANITIZE INPUT
     const ip = String(alertData.ip).trim();
-
     const anomalyScore = Number(alertData.anomalyScore ?? 0);
+    const attackType = normalizeAttackType(alertData.attackType);
 
-    const attackType = alertData.attackType || "Suspicious";
-
-    // normalize type for your system
+    // normalize type for your system (backward compatibility)
     const normalizedType =
       attackType.toLowerCase().replace(/\s+/g, "") || "unknown";
 
@@ -53,7 +66,15 @@ const createAlert = async (alertData = {}, io = null) => {
 
     // ✅ SOCKET EMIT AFTER DB SAVE
     if (io) {
-      io.emit("new_alert", alert);
+      io.emit("new_alert", {
+        id: alert._id,
+        ip: alert.ip,
+        attackType: alert.attackType,
+        anomalyScore: alert.anomalyScore,
+        severity: alert.severity,
+        timestamp: alert.timestamp,
+        meta: alert.meta
+      });
     }
 
     // 🔥 SAFE ALERT INTEGRATIONS

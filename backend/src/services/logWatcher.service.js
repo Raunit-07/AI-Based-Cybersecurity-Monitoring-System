@@ -2,7 +2,7 @@ import fs from "fs";
 import chokidar from "chokidar";
 import axios from "axios";
 import path from "path";
-import Alert from "../models/alert.model.js";
+import { createAlert } from "./alerts.service.js";
 
 let lastSize = 0;
 
@@ -55,17 +55,15 @@ export const startLogWatcher = (io) => {
 
                     const result = response.data;
 
-                    const alert = {
+                    // Use standardized createAlert service
+                    await createAlert({
                         ip: extractIP(line),
                         rawLog: line,
                         attackType: result.attackType,
                         anomalyScore: result.anomaly_score,
                         severity: result.is_anomaly ? "high" : "low",
                         timestamp: new Date(),
-                    };
-                    await Alert.create(alert);
-
-                    io.emit("new-alert", alert);
+                    }, io);
 
                     io.emit("traffic-update", {
                         requests: 1,
@@ -73,7 +71,7 @@ export const startLogWatcher = (io) => {
                         timestamp: new Date(),
                     });
 
-                    console.log("🚨 Real alert emitted");
+                    console.log("🚨 Real alert emitted via service");
                 } catch (error) {
                     console.error("❌ ML Error:", error.message);
                 }

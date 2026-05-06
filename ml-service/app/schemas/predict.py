@@ -15,7 +15,7 @@ class PredictionRequest(BaseModel):
 class PredictionData(BaseModel):
     anomaly_score: float
     is_anomaly: bool
-    attack_type: str
+    attackType: str
 
 
 # ================= FULL RESPONSE =================

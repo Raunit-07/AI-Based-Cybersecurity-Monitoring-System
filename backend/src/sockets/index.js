@@ -66,18 +66,18 @@ const emitAlert = (alert) => {
     const formattedAlert = {
       id: alert._id || null,
       ip: alert.ip || "unknown",
-      type: alert.type || alert.attackType || "unknown",
+      attackType: alert.attackType || alert.type || "unknown",
       severity: alert.severity || "low",
-      requests: alert.requests || 0,
-      failedLogins: alert.failedLogins || 0,
-      score: alert.anomaly_score || 0,
-      time: alert.timestamp
+      requests: alert.requests || (alert.meta && alert.meta.requests) || 0,
+      failedLogins: alert.failedLogins || (alert.meta && alert.meta.failedLogins) || 0,
+      anomalyScore: alert.anomalyScore || alert.score || 0,
+      timestamp: alert.timestamp
         ? new Date(alert.timestamp).toISOString()
         : new Date().toISOString(),
       status: alert.status || "active",
     };
 
-    io.emit("new-alert", formattedAlert);
+    io.emit("new_alert", formattedAlert);
 
     logger.info("📡 Alert emitted to clients");
   } catch (error) {

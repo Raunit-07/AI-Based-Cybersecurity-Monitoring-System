@@ -41,7 +41,7 @@ def preprocess(request: PredictionRequest) -> np.ndarray:
 
 
 # ================= ATTACK TYPE =================
-def determine_attack_type(
+def determine_attackType(
     is_anomaly: bool, request_count: int, failed_logins: int
 ) -> str:
     if not is_anomaly:
@@ -94,7 +94,7 @@ def run_prediction_pipeline(request: PredictionRequest):
             normalized_score = float(min(max(-score * 5, 0.4), 1))
 
         # 🔹 Step 5: Attack classification
-        attack_type = determine_attack_type(
+        attackType = determine_attackType(
             is_anomaly,
             request.requests,
             request.failedLogins,
@@ -108,7 +108,7 @@ def run_prediction_pipeline(request: PredictionRequest):
                     "ip": request.ip,
                     "is_anomaly": is_anomaly,
                     "score": normalized_score,
-                    "attack_type": attack_type,
+                    "attackType": attackType,
                 }
             },
         )
@@ -117,7 +117,7 @@ def run_prediction_pipeline(request: PredictionRequest):
         return PredictionData(
             anomaly_score=normalized_score,
             is_anomaly=is_anomaly,
-            attack_type=attack_type,
+            attackType=attackType,
         )
 
     except Exception as e:

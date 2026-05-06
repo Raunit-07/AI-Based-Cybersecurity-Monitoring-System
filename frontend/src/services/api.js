@@ -5,12 +5,21 @@ import axios from "axios";
  * AXIOS INSTANCE
  * ================================
  */
+const BASE_URL =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+/**
+ * ================= AXIOS INSTANCE =================
+ */
 const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL: BASE_URL,
   withCredentials: true,
+
   timeout: 10000,
+
   headers: {
     "Content-Type": "application/json",
+    Accept: "application/json",
   },
 });
 
