@@ -6,6 +6,7 @@ import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
 import { subscribeToAlerts } from "../services/socket";
 import { fetchAlerts } from "../services/api"; // ✅ NEW
 import { useSuspiciousIPs } from "../hooks/useThreatData";
+import ThreatTimeline from "../components/ThreatTimeline";
 
 import { Shield, AlertTriangle, Activity, Database } from "lucide-react";
 
@@ -161,6 +162,11 @@ export const Dashboard = () => {
           ) : (
             <SuspiciousIPsTable ips={safeIPs} />
           )}
+        </div>
+
+        {/* ================= THREAT TIMELINE ================= */}
+        <div className="w-full">
+          <ThreatTimeline />
         </div>
       </div>
     </div>

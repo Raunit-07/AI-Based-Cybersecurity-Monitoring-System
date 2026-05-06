@@ -11,6 +11,7 @@ const router = express.Router();
 
 // ✅ Get alerts (pagination + filtering)
 router.get("/", authMiddleware, alertsController.getAlerts);
+router.get("/timeline", alertsController.getThreatTimeline);
 
 // ✅ Resolve alert
 router.patch(

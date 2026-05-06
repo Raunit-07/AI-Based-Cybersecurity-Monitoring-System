@@ -10,6 +10,7 @@ import connectDB from "./config/db.js";
 import logger from "./utils/logger.js";
 import { Server } from "socket.io";
 import { verifyEmailService } from "./integrations/email.js";
+import { startLogWatcher } from "./services/logWatcher.service.js";
 
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
@@ -91,6 +92,11 @@ const startServer = async () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`Frontend allowed: ${FRONTEND_URL}`);
       logger.info("Socket.IO ready");
+
+      // 🔥 START REAL LOG WATCHER
+      startLogWatcher(io);
+
+      logger.info("Real log watcher started");
     });
 
     serverInstance.on("error", (err) => {
