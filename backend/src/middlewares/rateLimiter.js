@@ -1,35 +1,45 @@
 import rateLimit from "express-rate-limit";
-import RedisStore from "rate-limit-redis";
-import { getRedisClient } from "../config/redis.js";
 
-// ================= HELPER =================
-const createRateLimiter = (options) => {
-  const client = getRedisClient();
-
-  const store = client
-    ? new RedisStore({
-        sendCommand: (...args) => client.sendCommand(args),
-      })
-    : undefined; // fallback to memory store
-
-  return rateLimit({
-    store,
-    standardHeaders: true,
-    legacyHeaders: false,
-    ...options,
+/**
+ * ===============================
+ * RATE LIMIT RESPONSE HANDLER
+ * ===============================
+ */
+const rateLimitHandler = (req, res) => {
+  return res.status(429).json({
+    success: false,
+    data: null,
+    message: "Too many requests, please try again later",
   });
 };
 
-// ================= GLOBAL LIMITER =================
-export const globalLimiter = createRateLimiter({
+/**
+ * ===============================
+ * GLOBAL LIMITER
+ * ===============================
+ */
+export const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
-  message: "Too many requests, try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: rateLimitHandler,
 });
 
-// ================= AUTH LIMITER =================
-export const authLimiter = createRateLimiter({
+/**
+ * ===============================
+ * AUTH LIMITER
+ * ===============================
+ *
+ * Used on:
+ * POST /api/auth/register
+ * POST /api/auth/login
+ */
+export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 50,
-  message: "Too many login attempts, try again later",
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: false,
+  handler: rateLimitHandler,
 });

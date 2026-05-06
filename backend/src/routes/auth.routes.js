@@ -2,12 +2,11 @@ import express from "express";
 import authController from "../controllers/auth.controller.js";
 
 import {
-    registerValidator,
-    loginValidator,
+  registerValidator,
+  loginValidator,
 } from "../validators/auth.validator.js";
 
 import validate from "../middlewares/validate.middleware.js";
-import { authLimiter } from "../middlewares/rateLimiter.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
@@ -17,34 +16,31 @@ const router = express.Router();
  */
 
 // Register
+// TEMP FIX: authLimiter removed because it is causing "next is not a function"
 router.post(
-    "/register",
-    authLimiter,
-    registerValidator,
-    validate,
-    authController.register
+  "/register",
+  registerValidator,
+  validate,
+  authController.register
 );
 
 // Login
 router.post(
-    "/login",
-    authLimiter,
-    loginValidator,
-    validate,
-    authController.login
+  "/login",
+  loginValidator,
+  validate,
+  authController.login
 );
 
-// Refresh Token (Important: no authMiddleware here)
+// Refresh Token
 router.post("/refresh-token", authController.refreshToken);
 
 /**
  * ================= PROTECTED ROUTES =================
  */
 
-// Logout (requires valid user)
 router.post("/logout", authMiddleware, authController.logout);
 
-// Get current logged-in user
 router.get("/me", authMiddleware, authController.getMe);
 
 export default router;

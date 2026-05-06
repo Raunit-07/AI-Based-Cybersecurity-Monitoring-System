@@ -3,9 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
-import mongoSanitize from "express-mongo-sanitize";
 import compression from "compression";
-import hpp from "hpp";
 
 import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
@@ -17,17 +15,25 @@ import { attachIO } from "./middlewares/socket.js";
 
 const app = express();
 
-// ================= BASIC SETTINGS =================
+/**
+ * ================= BASIC SETTINGS =================
+ */
 app.set("trust proxy", 1);
 
-// ================= SECURITY =================
+/**
+ * ================= SECURITY =================
+ */
 app.use(
   helmet({
-    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
   })
 );
 
-// ================= CORS (FIXED PROPERLY) =================
+/**
+ * ================= CORS =================
+ */
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
@@ -37,10 +43,10 @@ const allowedOrigins = [
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`Not allowed by CORS: ${origin}`));
+      return callback(null, true);
     }
+
+    return callback(new Error(`Not allowed by CORS: ${origin}`));
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -48,82 +54,175 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.options(/.*/, cors(corsOptions));
 
-// 🔥 Regex-based preflight handling (Express v5 safe)
-app.options(/^(.*)$/, cors(corsOptions));
-
-// ================= BODY PARSING =================
+/**
+ * ================= BODY PARSING =================
+ */
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
-// Prevent NoSQL injection
-app.use(mongoSanitize());
+/**
+ * ================= SAFE CUSTOM SANITIZER =================
+ */
+const sanitizeObject = (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
 
-// Prevent HTTP parameter pollution
-app.use(hpp());
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeObject);
+  }
 
-// ================= PERFORMANCE =================
+  const cleaned = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    const safeKey = key.replace(/\$/g, "").replace(/\./g, "");
+
+    cleaned[safeKey] =
+      value && typeof value === "object" ? sanitizeObject(value) : value;
+  }
+
+  return cleaned;
+};
+
+app.use((req, res, next) => {
+  try {
+    if (req.body) {
+      req.body = sanitizeObject(req.body);
+    }
+
+    if (req.params) {
+      req.params = sanitizeObject(req.params);
+    }
+
+    if (req.query) {
+      Object.defineProperty(req, "query", {
+        value: sanitizeObject({ ...req.query }),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
+    }
+
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+});
+
+/**
+ * ================= COMPRESSION =================
+ */
 app.use(compression());
 
-// ================= RATE LIMIT =================
+/**
+ * ================= GLOBAL RATE LIMIT =================
+ */
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Too many requests, please try again later",
+  handler: (req, res) => {
+    return res.status(429).json({
+      success: false,
+      data: null,
+      message: "Too many requests, please try again later",
+    });
   },
 });
 
 app.use("/api", limiter);
 
-// ================= SOCKET.IO =================
+/**
+ * ================= SOCKET.IO =================
+ */
 app.use(attachIO);
 
-// ================= HEALTH =================
+/**
+ * ================= HEALTH =================
+ */
 app.get("/", (req, res) => {
-  res.send("Backend API Running ✅");
+  res.status(200).send("Backend API Running ✅");
 });
 
-// ================= ROUTES =================
+app.get("/api/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Backend API Running ✅",
+  });
+});
+
+/**
+ * ================= ROUTES =================
+ */
 app.use("/api/auth", authRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/alerts", alertRoutes);
 
-// Protected route
 app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 
-// ================= DEBUG =================
+/**
+ * ================= DEBUG ROUTE =================
+ */
 if (process.env.NODE_ENV !== "production") {
   app.get("/test", (req, res) => {
-    res.send("TEST OK");
+    res.status(200).send("TEST OK");
   });
 }
 
-// ================= 404 =================
+/**
+ * ================= 404 =================
+ */
 app.use((req, res) => {
   res.status(404).json({
     success: false,
+    data: null,
     message: "Route not found",
   });
 });
 
-// ================= GLOBAL ERROR HANDLER =================
+/**
+ * ================= GLOBAL ERROR HANDLER =================
+ */
 app.use((err, req, res, next) => {
-  const statusCode = err.status || 500;
-  const message = err.message || "Internal Server Error";
+  let statusCode = err.statusCode || err.status || 500;
+  let message = err.message || "Internal Server Error";
 
-  // Use logger if imported, otherwise console.error
-  console.error(`❌ Error: ${message}`);
+  if (err.name === "ValidationError") {
+    statusCode = 400;
+    message = Object.values(err.errors)
+      .map((val) => val.message)
+      .join(", ");
+  }
 
-  res.status(statusCode).json({
+  if (err.code === 11000) {
+    console.error("Duplicate key error details:", err);
+    statusCode = 409;
+    message = "User already exists with this email";
+  }
+
+  if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+    statusCode = 401;
+    message = "Invalid or expired token";
+  }
+
+  if (err.message?.startsWith("Not allowed by CORS")) {
+    statusCode = 403;
+    message = err.message;
+  }
+
+  console.error(`❌ Error [${statusCode}]: ${message}`);
+
+  if (statusCode >= 500) {
+    console.error(err.stack);
+  }
+
+  return res.status(statusCode).json({
     success: false,
     data: null,
     message:
-      process.env.NODE_ENV === "production"
+      process.env.NODE_ENV === "production" && statusCode === 500
         ? "Internal Server Error"
         : message,
   });

@@ -28,7 +28,7 @@ const io = new Server(server, {
     methods: ["GET", "POST"],
     credentials: true,
   },
-  transports: ["websocket"], // production optimized
+  transports: ["websocket", "polling"],
   pingTimeout: 60000,
   pingInterval: 25000,
 });
@@ -38,17 +38,10 @@ const io = new Server(server, {
  */
 io.use((socket, next) => {
   try {
-    const token =
-      socket.handshake.auth?.token ||
-      socket.handshake.headers?.authorization?.split(" ")[1];
-
-    // Optional: enable later
-    // if (!token) return next(new Error("Unauthorized"));
-
-    next();
+    return next();
   } catch (err) {
-    logger.error("❌ Socket auth error:", err);
-    next(new Error("Socket authentication failed"));
+    logger.error("Socket auth error:", err);
+    return next(new Error("Socket authentication failed"));
   }
 });
 
@@ -56,44 +49,20 @@ io.use((socket, next) => {
  * ================= SOCKET EVENTS =================
  */
 io.on("connection", (socket) => {
-  logger.info(`✅ Socket connected: ${socket.id}`);
+  logger.info(`Socket connected: ${socket.id}`);
 
   socket.on("ping", () => {
     socket.emit("pong");
   });
 
   socket.on("disconnect", (reason) => {
-    logger.info(`❌ Socket disconnected: ${socket.id} | ${reason}`);
+    logger.info(`Socket disconnected: ${socket.id} | ${reason}`);
   });
 
   socket.on("error", (err) => {
-    logger.error(`❌ Socket error (${socket.id}): ${err.message}`);
+    logger.error(`Socket error (${socket.id}): ${err.message}`);
   });
 });
-
-/**
- * ================= 🔥 DEBUG EMITTER (TEMPORARY) =================
- * This proves your frontend + socket is working
- */
-if (process.env.NODE_ENV !== "production") {
-  setInterval(() => {
-    const traffic = Math.floor(Math.random() * 500);
-
-    logger.info("🔥 Emitting test data...");
-
-    io.emit("traffic_update", {
-      requests: traffic,
-    });
-
-    io.emit("new_alert", {
-      ip: "192.168.1.1",
-      attack_type: "ddos",
-      anomaly_score: 0.9,
-      timestamp: new Date(),
-    });
-
-  }, 5000);
-}
 
 /**
  * ================= ATTACH IO TO APP =================
@@ -111,25 +80,30 @@ let serverInstance = null;
 const startServer = async () => {
   try {
     await connectDB();
-    await verifyEmailService();
+
+    try {
+      await verifyEmailService();
+    } catch (emailError) {
+      logger.warn(`Email service verification failed: ${emailError.message}`);
+    }
 
     serverInstance = server.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT}`);
-      logger.info(`🌐 Frontend allowed: ${FRONTEND_URL}`);
-      logger.info(`🔌 Socket.IO ready`);
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Frontend allowed: ${FRONTEND_URL}`);
+      logger.info("Socket.IO ready");
     });
 
     serverInstance.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
-        logger.error(`❌ Port ${PORT} already in use`);
+        logger.error(`Port ${PORT} already in use`);
       } else {
-        logger.error("❌ Server error:", err);
+        logger.error("Server error:", err);
       }
+
       process.exit(1);
     });
-
   } catch (error) {
-    logger.error("❌ Failed to start server:", error);
+    logger.error("Failed to start server:", error);
     process.exit(1);
   }
 };
@@ -140,11 +114,11 @@ startServer();
  * ================= GRACEFUL SHUTDOWN =================
  */
 const shutdown = () => {
-  logger.info("🛑 Graceful shutdown initiated");
+  logger.info("Graceful shutdown initiated");
 
   if (serverInstance) {
     serverInstance.close(() => {
-      logger.info("💤 Server closed");
+      logger.info("Server closed");
       process.exit(0);
     });
   } else {
@@ -159,12 +133,12 @@ process.on("SIGTERM", shutdown);
  * ================= GLOBAL ERROR HANDLING =================
  */
 process.on("unhandledRejection", (err) => {
-  logger.error("❌ Unhandled Rejection:", err);
+  logger.error("Unhandled Rejection:", err);
   shutdown();
 });
 
 process.on("uncaughtException", (err) => {
-  logger.error("❌ Uncaught Exception:", err);
+  logger.error("Uncaught Exception:", err);
   shutdown();
 });
 

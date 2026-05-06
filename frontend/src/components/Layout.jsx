@@ -44,7 +44,7 @@ export const Layout = () => {
 
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center justify-between px-4 py-2">
-            <span className="text-sm text-gray-400">{user?.username}</span>
+            <span className="text-sm text-gray-400 truncate">{user?.email}</span>
             <button 
               onClick={logout}
               className="p-2 text-gray-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors"

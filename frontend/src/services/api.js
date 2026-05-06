@@ -2,32 +2,25 @@ import axios from "axios";
 
 /**
  * ================================
- * AXIOS INSTANCE (PRODUCTION SAFE)
+ * AXIOS INSTANCE
  * ================================
  */
-
 const API = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
   withCredentials: true,
-  timeout: 10000, // prevent hanging requests
+  timeout: 10000,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
 /**
  * ================================
  * REQUEST INTERCEPTOR
  * ================================
- * Attach token if present
  */
 API.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("accessToken");
-
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    return config;
-  },
+  (config) => config,
   (error) => Promise.reject(error)
 );
 
@@ -35,54 +28,71 @@ API.interceptors.request.use(
  * ================================
  * RESPONSE INTERCEPTOR
  * ================================
- * Normalize responses + handle errors
  */
 API.interceptors.response.use(
   (response) => response.data,
   (error) => {
-    // Network error
     if (!error.response) {
-      console.error("Network error:", error.message);
       return Promise.reject({
         success: false,
-        error: "Network error. Please check your connection.",
+        status: 0,
+        message:
+          "Network error. Please check your connection or backend server.",
+        errors: [],
+        raw: null,
       });
     }
 
-    // Unauthorized (auto logout optional)
-    if (error.response.status === 401) {
-      console.warn("Unauthorized - clearing session");
-      localStorage.removeItem("accessToken");
-    }
+    const status = error.response.status;
+    const data = error.response.data || {};
 
     return Promise.reject({
       success: false,
-      error:
-        error.response?.data?.error ||
-        error.response?.data?.message ||
-        "Something went wrong",
+      status,
+      message: data.message || data.error || "Something went wrong",
+      errors: Array.isArray(data.errors) ? data.errors : [],
+      raw: data,
     });
   }
 );
 
 /**
  * ================================
- * ALERT APIs
+ * AUTH APIs
  * ================================
  */
+export const register = async (data) => {
+  return await API.post("/auth/register", data);
+};
+
+export const login = async (data) => {
+  return await API.post("/auth/login", data);
+};
+
+export const logout = async () => {
+  return await API.post("/auth/logout");
+};
+
+export const getMe = async () => {
+  return await API.get("/auth/me");
+};
 
 /**
- * Get all alerts
+ * ================================
+ * ALERT APIs
+ * ================================
  */
 export const fetchAlerts = async (params = {}) => {
   const res = await API.get("/alerts", { params });
 
-  return res.data || [];
+  // After interceptor unwrap: res = {success, data: {alerts, total}, message}
+  if (Array.isArray(res?.data?.alerts)) return res.data.alerts;
+  if (Array.isArray(res?.data)) return res.data;
+  if (Array.isArray(res)) return res;
+
+  return [];
 };
 
-/**
- * Resolve alert
- */
 export const resolveAlert = async (id) => {
   if (!id) throw new Error("Alert ID required");
 
@@ -91,7 +101,7 @@ export const resolveAlert = async (id) => {
 
 /**
  * ================================
- * LOG INGESTION (REAL TRIGGER)
+ * LOG INGESTION
  * ================================
  */
 export const sendLog = async (logData) => {
@@ -100,25 +110,6 @@ export const sendLog = async (logData) => {
   }
 
   return await API.post("/logs", logData);
-};
-
-/**
- * ================================
- * AUTH APIs (OPTIONAL)
- * ================================
- */
-export const login = async (data) => {
-  const res = await API.post("/auth/login", data);
-
-  if (res?.data?.token) {
-    localStorage.setItem("accessToken", res.data.token);
-  }
-
-  return res;
-};
-
-export const logout = () => {
-  localStorage.removeItem("accessToken");
 };
 
 export default API;

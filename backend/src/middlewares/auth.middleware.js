@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
-import User from "../models/User.js"; // ✅ FIXED (lowercase)
+import mongoose from "mongoose";
+import User from "../models/User.js";
 
 /**
  * ================= AUTH MIDDLEWARE =================
@@ -8,73 +9,70 @@ export const authMiddleware = async (req, res, next) => {
   try {
     let token = null;
 
-    // ================= GET TOKEN FROM COOKIE =================
     if (req.cookies?.accessToken) {
       token = req.cookies.accessToken;
-    }
-
-    // ================= FALLBACK: AUTH HEADER =================
-    if (!token && req.headers.authorization?.startsWith("Bearer ")) {
+    } else if (req.headers.authorization?.startsWith("Bearer ")) {
       token = req.headers.authorization.split(" ")[1];
     }
 
-    // ================= NO TOKEN =================
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized: No token provided",
+        data: null,
+        message: "Unauthorized: Access token missing",
       });
     }
 
-    // ================= VERIFY SECRET =================
     if (!process.env.JWT_ACCESS_SECRET) {
-      throw new Error("JWT_ACCESS_SECRET not defined");
+      return res.status(500).json({
+        success: false,
+        data: null,
+        message: "Internal server configuration error",
+      });
     }
 
-    // ================= VERIFY TOKEN =================
     let decoded;
+
     try {
       decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
-    } catch {
+    } catch (err) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized: Invalid or expired token",
+        data: null,
+        message:
+          err.name === "TokenExpiredError"
+            ? "Unauthorized: Token expired"
+            : "Unauthorized: Invalid token",
       });
     }
 
-    // ================= VALIDATE PAYLOAD =================
-    if (!decoded?.id) {
+    if (!decoded?.id || !mongoose.Types.ObjectId.isValid(decoded.id)) {
       return res.status(401).json({
         success: false,
+        data: null,
         message: "Unauthorized: Invalid token payload",
       });
     }
 
-    // ================= FETCH USER =================
-    const user = await User.findById(decoded.id).select("-password");
+    const user = await User.findById(decoded.id).select("-password").lean();
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: "Unauthorized: User not found",
+        data: null,
+        message: "Unauthorized: User no longer exists",
       });
     }
 
-    // ================= ATTACH USER =================
     req.user = {
-      id: user._id,
+      id: user._id.toString(),
       email: user.email,
       role: user.role,
     };
 
-    next();
+    return next();
   } catch (error) {
-    console.error("❌ Auth middleware error:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Server error in authentication",
-    });
+    return next(error);
   }
 };
 
@@ -86,9 +84,11 @@ export const authorizeRoles = (...roles) => {
     if (!req.user?.role || !roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
+        data: null,
         message: "Forbidden: Access denied",
       });
     }
-    next();
+
+    return next();
   };
 };

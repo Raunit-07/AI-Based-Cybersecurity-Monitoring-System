@@ -21,7 +21,9 @@ const getCookieOptions = () => {
  */
 const setTokensInCookies = (res, accessToken, refreshToken) => {
   if (!accessToken || !refreshToken) {
-    throw new Error("Missing authentication tokens");
+    const error = new Error("Missing authentication tokens");
+    error.status = 500;
+    throw error;
   }
 
   const cookieOptions = getCookieOptions();
@@ -51,10 +53,9 @@ const clearTokens = (res) => {
  * ================= REGISTER =================
  */
 const register = catchAsync(async (req, res) => {
-  let { email, password, role } = req.body;
+  let { email, password } = req.body;
 
-  email = email?.trim().toLowerCase();
-  password = password?.trim();
+  email = String(email || "").trim().toLowerCase();
 
   if (!email || !password) {
     return apiResponse(
@@ -66,7 +67,7 @@ const register = catchAsync(async (req, res) => {
     );
   }
 
-  const result = await authService.registerUser(email, password, role);
+  const result = await authService.registerUser(email, password);
 
   const { user, accessToken, refreshToken } = result;
 
@@ -87,8 +88,7 @@ const register = catchAsync(async (req, res) => {
 const login = catchAsync(async (req, res) => {
   let { email, password } = req.body;
 
-  email = email?.trim().toLowerCase();
-  password = password?.trim();
+  email = String(email || "").trim().toLowerCase();
 
   if (!email || !password) {
     return apiResponse(
@@ -100,28 +100,13 @@ const login = catchAsync(async (req, res) => {
     );
   }
 
-  let result;
-
-  try {
-    result = await authService.loginUser(email, password);
-  } catch (error) {
-    if (error.status === 401) {
-      return apiResponse(res, 401, false, null, "Invalid credentials");
-    }
-    throw error;
-  }
+  const result = await authService.loginUser(email, password);
 
   const { user, accessToken, refreshToken } = result;
 
   setTokensInCookies(res, accessToken, refreshToken);
 
-  return apiResponse(
-    res,
-    200,
-    true,
-    { user },
-    "Login successful"
-  );
+  return apiResponse(res, 200, true, { user }, "Login successful");
 });
 
 /**
@@ -135,6 +120,10 @@ const refreshToken = catchAsync(async (req, res) => {
   }
 
   const tokens = await authService.refreshAuthToken(existingRefreshToken);
+
+  if (!tokens?.accessToken || !tokens?.refreshToken) {
+    return apiResponse(res, 401, false, null, "Invalid refresh token");
+  }
 
   setTokensInCookies(res, tokens.accessToken, tokens.refreshToken);
 
@@ -158,6 +147,10 @@ const logout = catchAsync(async (req, res) => {
  * ================= CURRENT USER =================
  */
 const getMe = catchAsync(async (req, res) => {
+  if (!req.user) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
+
   return apiResponse(
     res,
     200,

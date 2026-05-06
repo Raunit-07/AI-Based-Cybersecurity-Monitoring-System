@@ -9,10 +9,10 @@ export const useAlerts = () => {
     queryFn: async () => {
       const res = await api.get("/alerts");
 
-      // ✅ Normalize response safely
+      // After interceptor unwrap: res = {success, data: {alerts, total}, message}
       const alerts =
-        res?.data?.data?.alerts ||   // preferred backend format
-        res?.data?.alerts ||         // fallback
+        res?.data?.alerts ||   // preferred backend format
+        res?.data ||           // fallback
         [];
 
       return Array.isArray(alerts) ? alerts : [];
@@ -37,9 +37,10 @@ export const useSuspiciousIPs = () => {
     queryFn: async () => {
       const res = await api.get("/ips");
 
+      // After interceptor unwrap: res = {success, data: {ips}, message}
       const ips =
-        res?.data?.data?.ips ||
         res?.data?.ips ||
+        res?.data ||
         [];
 
       return Array.isArray(ips) ? ips : [];

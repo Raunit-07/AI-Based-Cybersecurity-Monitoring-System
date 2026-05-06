@@ -1,190 +1,206 @@
-// import { useEffect, useState } from "react";
-// import { getSocket } from "../services/socket";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import api from "../services/api";
 
-// const useAlerts = () => {
-//     const [alerts, setAlerts] = useState([]);
-//     const [stats, setStats] = useState({
-//         activeThreats: 0,
-//         criticalAlerts: 0,
-//         totalRequests: 0,
-//         monitoredIPs: 0,
-//     });
+const AuthContext = createContext(null);
 
-//     useEffect(() => {
-//         const socket = getSocket();
+const PUBLIC_ROUTES = ["/login", "/register"];
 
-//         // ================= CONNECTION =================
-//         const handleConnect = () => {
-//             console.log("✅ Connected to backend:", socket.id);
-//         };
-
-//         // ================= ALERT HANDLER =================
-//         const handleNewAlert = (data) => {
-//             console.log("🚨 RECEIVED ALERT:", data);
-
-//             if (!data || !data.id) return;
-
-//             // ✅ Normalize alert (MATCH BACKEND FORMAT)
-//             const formattedAlert = {
-//                 id: data.id,
-//                 type: data.type,
-//                 severity: data.severity,
-//                 source: data.source,
-//                 time: data.time,
-//                 status: "active",
-//             };
-
-//             // ✅ Update alerts list (limit to 10)
-//             setAlerts((prev) => [formattedAlert, ...prev].slice(0, 10));
-
-//             // ✅ Update stats safely
-//             setStats((prev) => ({
-//                 ...prev,
-//                 activeThreats: prev.activeThreats + 1,
-//                 criticalAlerts:
-//                     data.type === "ddos"
-//                         ? prev.criticalAlerts + 1
-//                         : prev.criticalAlerts,
-//                 monitoredIPs: prev.monitoredIPs + 1,
-//             }));
-//         };
-
-//         // ================= TRAFFIC HANDLER =================
-//         const handleTrafficUpdate = (data) => {
-//             console.log("📊 RECEIVED TRAFFIC:", data);
-
-//             if (!data || typeof data.requests !== "number") return;
-
-//             setStats((prev) => ({
-//                 ...prev,
-//                 totalRequests: data.requests,
-//             }));
-//         };
-
-//         // ================= ATTACH EVENTS =================
-//         socket.on("connect", handleConnect);
-//         socket.on("new_alert", handleNewAlert);
-//         socket.on("traffic_update", handleTrafficUpdate);
-
-//         // ================= CLEANUP =================
-//         return () => {
-//             socket.off("connect", handleConnect);
-//             socket.off("new_alert", handleNewAlert);
-//             socket.off("traffic_update", handleTrafficUpdate);
-//         };
-//     }, []);
-
-//     return { alerts, stats };
-// };
-
-// export default useAlerts;
-
-
-
-
-
-
-
-
-import { useEffect, useState } from "react";
-import { getSocket } from "../services/socket";
-
-const useAlerts = () => {
-    const [alerts, setAlerts] = useState([]);
-    const [stats, setStats] = useState({
-        activeThreats: 0,
-        criticalAlerts: 0,
-        totalRequests: 0,
-        monitoredIPs: 0,
-    });
-
-    useEffect(() => {
-        const socket = getSocket();
-
-        // ================= CONNECTION =================
-        const handleConnect = () => {
-            console.log("✅ Connected to backend:", socket.id);
-        };
-
-        // ================= ALERT HANDLER =================
-        const handleNewAlert = (data) => {
-            console.log("🚨 RECEIVED ALERT:", data);
-
-            // ✅ HARD VALIDATION
-            if (!data || typeof data !== "object") {
-                console.warn("❌ Invalid alert payload:", data);
-                return;
-            }
-
-            const { ip, attack_type, anomaly_score, timestamp } = data;
-
-            if (!ip || !attack_type) {
-                console.warn("❌ Missing required fields:", data);
-                return;
-            }
-
-            // ✅ NORMALIZE + SAFE MAPPING
-            const severity =
-                attack_type === "ddos"
-                    ? "high"
-                    : attack_type === "bruteforce"
-                        ? "medium"
-                        : "low";
-
-            const formattedAlert = {
-                id: `${ip}-${Date.now()}`, // safer unique ID
-                ip,
-                type: attack_type,
-                severity,
-                score: typeof anomaly_score === "number" ? anomaly_score : 0,
-                time: timestamp || new Date().toISOString(),
-                status: "active",
-            };
-
-            // ✅ UPDATE ALERT LIST (LIMITED + SAFE)
-            setAlerts((prev) => [formattedAlert, ...prev].slice(0, 10));
-
-            // ✅ UPDATE STATS (DEFENSIVE)
-            setStats((prev) => ({
-                ...prev,
-                activeThreats: prev.activeThreats + 1,
-                criticalAlerts:
-                    severity === "high"
-                        ? prev.criticalAlerts + 1
-                        : prev.criticalAlerts,
-                monitoredIPs: prev.monitoredIPs + 1, // (can improve later with Set)
-            }));
-        };
-
-        // ================= TRAFFIC HANDLER =================
-        const handleTrafficUpdate = (data) => {
-            console.log("📊 RECEIVED TRAFFIC:", data);
-
-            if (!data || typeof data.requests !== "number") {
-                console.warn("❌ Invalid traffic data:", data);
-                return;
-            }
-
-            setStats((prev) => ({
-                ...prev,
-                totalRequests: data.requests,
-            }));
-        };
-
-        // ================= SOCKET EVENTS =================
-        socket.on("connect", handleConnect);
-        // socket.on("new_alert", handleNewAlert);
-        socket.on("traffic_update", handleTrafficUpdate);
-
-        // ================= CLEANUP =================
-        return () => {
-            socket.off("connect", handleConnect);
-            socket.off("new_alert", handleNewAlert);
-            socket.off("traffic_update", handleTrafficUpdate);
-        };
-    }, []);
-
-    return { alerts, stats };
+const isPublicRoute = () => {
+  const path = window.location.pathname;
+  return PUBLIC_ROUTES.includes(path);
 };
 
-export default useAlerts;
+export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+
+  /**
+   * loading = initial auth check loading
+   * authLoading = login/register/logout loading
+   */
+  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  /**
+   * ================= PERSIST LOGIN =================
+   */
+  const fetchUser = useCallback(async () => {
+    /**
+     * Do not call /auth/me on public pages.
+     * This removes repeated 401 console errors on login/register pages.
+     */
+    if (isPublicRoute()) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const res = await api.get("/auth/me");
+
+      if (res?.success && res?.data?.user) {
+        setUser(res.data.user);
+      } else {
+        setUser(null);
+      }
+    } catch {
+      /**
+       * Silent fail is correct here.
+       * 401 simply means user is not logged in.
+       */
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  /**
+   * ================= LOGIN =================
+   */
+  const login = async (email, password) => {
+    setAuthLoading(true);
+    setError(null);
+
+    try {
+      const cleanEmail = String(email || "").trim().toLowerCase();
+
+      const res = await api.post("/auth/login", {
+        email: cleanEmail,
+        password,
+      });
+
+      if (res?.success && res?.data?.user) {
+        setUser(res.data.user);
+
+        return {
+          success: true,
+          user: res.data.user,
+        };
+      }
+
+      const message = res?.message || "Invalid credentials";
+      setError(message);
+
+      return {
+        success: false,
+        message,
+      };
+    } catch (err) {
+      const message = err?.message || "Invalid credentials";
+
+      setError(message);
+
+      return {
+        success: false,
+        message,
+        status: err?.status,
+      };
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  /**
+   * ================= REGISTER =================
+   */
+  const register = async (email, password, confirmPassword) => {
+    setAuthLoading(true);
+    setError(null);
+
+    try {
+      const cleanEmail = String(email || "").trim().toLowerCase();
+
+      const res = await api.post("/auth/register", {
+        email: cleanEmail,
+        password,
+        confirmPassword,
+      });
+
+      if (res?.success) {
+        return {
+          success: true,
+          message: res?.message || "Registration successful",
+        };
+      }
+
+      const message = res?.message || "Registration failed";
+      setError(message);
+
+      return {
+        success: false,
+        message,
+      };
+    } catch (err) {
+      const message = err?.message || "Registration failed";
+
+      setError(message);
+
+      return {
+        success: false,
+        message,
+        status: err?.status,
+        errors: err?.errors || [],
+      };
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  /**
+   * ================= LOGOUT =================
+   */
+  const logout = async () => {
+    setAuthLoading(true);
+
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      /**
+       * Even if backend logout fails, clear frontend session.
+       */
+    } finally {
+      setUser(null);
+      setError(null);
+      setAuthLoading(false);
+    }
+  };
+
+  const value = {
+    user,
+    setUser,
+    login,
+    register,
+    logout,
+    fetchUser,
+    loading,
+    authLoading,
+    error,
+    setError,
+    isAuthenticated: Boolean(user),
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+/**
+ * ================= HOOK =================
+ */
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+
+  return context;
+};

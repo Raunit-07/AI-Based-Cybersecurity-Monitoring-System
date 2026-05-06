@@ -1,105 +1,156 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import api from '../services/api';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+} from "react";
+import { useLocation } from "react-router-dom";
+import api from "../services/api";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
+
+const PUBLIC_ROUTES = ["/login", "/register"];
 
 export const AuthProvider = ({ children }) => {
+  const location = useLocation();
+
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // for initial load
-  const [authLoading, setAuthLoading] = useState(false); // 🔥 login/register loading
-  const [error, setError] = useState(null); // 🔥 error state
+  const [loading, setLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  // ================= PERSIST LOGIN =================
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const res = await api.get('/auth/me');
+  const isPublicRoute = PUBLIC_ROUTES.includes(location.pathname);
 
-        if (res.data?.success) {
-          setUser(res.data.data.user);
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
+  const fetchUser = useCallback(async () => {
+    if (isPublicRoute) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await api.get("/auth/me");
+
+      if (res?.success && res?.data?.user) {
+        setUser(res.data.user);
+      } else {
         setUser(null);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch {
+      setUser(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [isPublicRoute]);
 
+  useEffect(() => {
     fetchUser();
-  }, []);
+  }, [fetchUser]);
 
-  // ================= LOGIN =================
   const login = async (email, password) => {
     setAuthLoading(true);
     setError(null);
 
     try {
-      const res = await api.post('/auth/login', {
-        email,
-        password
-      });
+      const cleanEmail = String(email || "").trim().toLowerCase();
 
-      if (res.data?.success) {
-        setUser(res.data.data.user);
-        return { success: true };
-      }
-
-      // fallback if API returns success false
-      setError('Invalid credentials');
-      return { success: false };
-
-    } catch (error) {
-      const message =
-        error.response?.data?.message || 'Invalid credentials, try again';
-
-      setError(message);
-      return { success: false };
-    } finally {
-      setAuthLoading(false); // 🔥 FIX: prevents infinite loading
-    }
-  };
-
-  // ================= REGISTER =================
-  const register = async (username, password, role = 'analyst') => {
-    setAuthLoading(true);
-    setError(null);
-
-    try {
-      const response = await api.post('/auth/register', {
-        username,
+      const res = await api.post("/auth/login", {
+        email: cleanEmail,
         password,
-        role
       });
 
-      if (response.data?.success) {
-        return { success: true };
+      if (res?.success && res?.data?.user) {
+        setUser(res.data.user);
+
+        return {
+          success: true,
+          user: res.data.user,
+        };
       }
 
-      setError('Registration failed');
-      return { success: false };
-
-    } catch (error) {
-      const message =
-        error.response?.data?.message || 'Registration failed';
-
+      const message = res?.message || "Invalid credentials";
       setError(message);
-      return { success: false };
+
+      return {
+        success: false,
+        message,
+      };
+    } catch (err) {
+      const message = err?.message || "Invalid credentials, try again";
+      setError(message);
+
+      return {
+        success: false,
+        message,
+        status: err?.status,
+      };
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // ================= LOGOUT =================
-  const logout = async () => {
+  const register = async (email, password, confirmPassword) => {
+    setAuthLoading(true);
+    setError(null);
+
     try {
-      await api.post('/auth/logout');
-    } catch (error) {
-      console.error('Logout error:', error);
+      const cleanEmail = String(email || "").trim().toLowerCase();
+
+      const res = await api.post("/auth/register", {
+        email: cleanEmail,
+        password,
+        confirmPassword,
+      });
+
+      if (res?.success) {
+        // Auto-login: set user in context since backend already set cookies
+        if (res?.data?.user) {
+          setUser(res.data.user);
+        }
+
+        return {
+          success: true,
+          message: res?.message || "Registration successful",
+          user: res?.data?.user || null,
+        };
+      }
+
+      const message = res?.message || "Registration failed";
+      setError(message);
+
+      return {
+        success: false,
+        message,
+      };
+    } catch (err) {
+      const message = err?.message || "Registration failed";
+      setError(message);
+
+      return {
+        success: false,
+        message,
+        status: err?.status,
+        errors: err?.errors || [],
+      };
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const logout = async () => {
+    setAuthLoading(true);
+
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // Clear frontend session even if backend logout fails.
     } finally {
       setUser(null);
       setError(null);
+      setAuthLoading(false);
     }
   };
 
@@ -107,13 +158,16 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider
       value={{
         user,
+        setUser,
         login,
         register,
         logout,
+        fetchUser,
         loading,
-        authLoading, // 🔥 use this in button
-        error,       // 🔥 show this in UI
-        setError     // optional reset
+        authLoading,
+        error,
+        setError,
+        isAuthenticated: Boolean(user),
       }}
     >
       {children}
@@ -121,7 +175,12 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// ================= HOOK =================
 export const useAuth = () => {
-  return useContext(AuthContext);
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+
+  return context;
 };

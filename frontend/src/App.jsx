@@ -1,23 +1,35 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { AuthProvider } from './hooks/useAuth';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { Layout } from './components/Layout';
-import { Login } from './pages/Login';
-import { Register } from './pages/Register';
+import React, { Suspense } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { AuthProvider } from "./hooks/useAuth";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { Layout } from "./components/Layout";
+import { Login } from "./pages/Login";
+import { Register } from "./pages/Register";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
-// Lazy loaded pages
-const Dashboard = React.lazy(() => import('./pages/Dashboard').then(module => ({ default: module.Dashboard })));
-const Alerts = React.lazy(() => import('./pages/Alerts').then(module => ({ default: module.Alerts })));
+/**
+ * Lazy loaded pages
+ */
+const Dashboard = React.lazy(() =>
+  import("./pages/Dashboard").then((module) => ({
+    default: module.Dashboard,
+  }))
+);
+
+const Alerts = React.lazy(() =>
+  import("./pages/Alerts").then((module) => ({
+    default: module.Alerts,
+  }))
+);
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
+      staleTime: 30 * 1000,
     },
   },
 });
@@ -25,44 +37,54 @@ const queryClient = new QueryClient({
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
+      <BrowserRouter>
+        <AuthProvider>
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            
-            <Route path="/" element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }>
-              <Route index element={
-                <ErrorBoundary>
-                  <Suspense fallback={<PageLoader />}>
-                    <Dashboard />
-                  </Suspense>
-                </ErrorBoundary>
-              } />
-              <Route path="alerts" element={
-                <ErrorBoundary>
-                  <Suspense fallback={<PageLoader />}>
-                    <Alerts />
-                  </Suspense>
-                </ErrorBoundary>
-              } />
+
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }
+            >
+              <Route
+                index
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <Dashboard />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+
+              <Route
+                path="alerts"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <Alerts />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
             </Route>
 
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </QueryClientProvider>
   );
 }
 
 const PageLoader = () => (
-  <div className="flex items-center justify-center h-full">
-    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+  <div className="flex items-center justify-center h-full min-h-screen bg-black">
+    <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary" />
   </div>
 );
 

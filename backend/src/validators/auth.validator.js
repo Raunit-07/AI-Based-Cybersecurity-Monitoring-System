@@ -1,42 +1,63 @@
 import { body } from "express-validator";
 
-// ================= REGISTER VALIDATOR =================
+/**
+ * ================= REGISTER VALIDATOR =================
+ */
 export const registerValidator = [
-  body("username")
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage("Username is required")
-    .isLength({ min: 3 })
-    .withMessage("Username must be at least 3 characters"),
+    .withMessage("Email is required")
+    .bail()
+    .isEmail()
+    .withMessage("Must be a valid email address")
+    .bail()
+    .customSanitizer((value) => String(value).trim().toLowerCase()),
 
   body("password")
     .notEmpty()
     .withMessage("Password is required")
-    .isLength({ min: 6 })
-    .withMessage("Password must be at least 6 characters"),
+    .bail()
+    .isLength({ min: 6, max: 128 })
+    .withMessage("Password must be between 6 and 128 characters"),
 
-  body("role")
-    .optional()
-    .isIn(["user", "admin"])
-    .withMessage("Invalid role"),
+  body("confirmPassword")
+    .notEmpty()
+    .withMessage("Confirm password is required")
+    .bail()
+    .custom((value, { req }) => {
+      if (value !== req.body.password) {
+        throw new Error("Passwords do not match");
+      }
+
+      return true;
+    }),
+
+  /**
+   * Security:
+   * Never allow public register API to create admin users.
+   */
+  body("role").optional().customSanitizer(() => "user"),
 ];
 
-// ================= LOGIN VALIDATOR =================
+/**
+ * ================= LOGIN VALIDATOR =================
+ */
 export const loginValidator = [
-  body("username")
-    .optional()
-    .trim()
-    .notEmpty()
-    .withMessage("Username is required"),
-
   body("email")
-    .optional()
     .trim()
     .notEmpty()
+    .withMessage("Email is required")
+    .bail()
     .isEmail()
-    .withMessage("Valid email is required"),
+    .withMessage("Valid email is required")
+    .bail()
+    .customSanitizer((value) => String(value).trim().toLowerCase()),
 
   body("password")
     .notEmpty()
-    .withMessage("Password is required"),
+    .withMessage("Password is required")
+    .bail()
+    .isLength({ min: 1, max: 128 })
+    .withMessage("Invalid password"),
 ];
