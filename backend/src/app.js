@@ -34,26 +34,59 @@ app.use(
 /**
  * ================= CORS =================
  */
+/**
+ * ================= CORS =================
+ */
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
   "http://localhost:5174",
-];
+
+  // ✅ PRODUCTION FRONTEND
+  process.env.FRONTEND_URL,
+].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // ✅ allow mobile apps / postman / server-to-server
+    if (!origin) {
       return callback(null, true);
     }
 
-    return callback(new Error(`Not allowed by CORS: ${origin}`));
+    // ✅ allow configured origins
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    console.error(`❌ CORS blocked for origin: ${origin}`);
+
+    return callback(
+      new Error(`Not allowed by CORS: ${origin}`),
+      false
+    );
   },
+
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"],
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
 };
 
+// ✅ APPLY CORS
 app.use(cors(corsOptions));
+
+// ✅ EXPRESS V5 PREFLIGHT FIX
 app.options(/.*/, cors(corsOptions));
 
 /**
