@@ -141,7 +141,10 @@ const processLog = async (logData, io) => {
     if (io) {
       io.emit("traffic_update", {
         requests: log.requests,
+        blocked: isAnomaly ? 1 : 0,
         timestamp: Date.now(),
+        ip: log.ip,
+        attackType: attackType || "Normal",
       });
     }
 

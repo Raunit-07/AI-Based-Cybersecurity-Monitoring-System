@@ -65,10 +65,12 @@ export const startLogWatcher = (io) => {
                         timestamp: new Date(),
                     }, io);
 
-                    io.emit("traffic-update", {
+                    io.emit("traffic_update", {
                         requests: 1,
                         blocked: result.is_anomaly ? 1 : 0,
                         timestamp: new Date(),
+                        ip: extractIP(line),
+                        attackType: result.attackType || "Unknown",
                     });
 
                     console.log("🚨 Real alert emitted via service");
