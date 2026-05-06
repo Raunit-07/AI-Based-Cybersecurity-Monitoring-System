@@ -1,34 +1,54 @@
 import winston from "winston";
 
-// Create logger instance
-const logger = winston.createLogger({
-  level: process.env.NODE_ENV === "production" ? "info" : "debug",
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  defaultMeta: { service: "threatops-backend" },
-  transports: [
-    new winston.transports.File({
-      filename: "logs/error.log",
-      level: "error",
-    }),
-    new winston.transports.File({
-      filename: "logs/combined.log",
-    }),
-  ],
-});
+const isProduction =
+  process.env.NODE_ENV === "production";
 
-// Add console logging in development
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
+/**
+ * =========================
+ * LOGGER FORMAT
+ * =========================
+ */
+const logFormat = winston.format.combine(
+  winston.format.timestamp(),
+  winston.format.errors({ stack: true }),
+  winston.format.json()
+);
+
+/**
+ * =========================
+ * TRANSPORTS
+ * =========================
+ * Render/Vercel production environments
+ * should use console logging only.
+ */
+const transports = [
+  new winston.transports.Console({
+    format: isProduction
+      ? logFormat
+      : winston.format.combine(
         winston.format.colorize(),
         winston.format.simple()
       ),
-    })
-  );
-}
+  }),
+];
+
+/**
+ * =========================
+ * LOGGER INSTANCE
+ * =========================
+ */
+const logger = winston.createLogger({
+  level:
+    process.env.LOG_LEVEL ||
+    (isProduction ? "info" : "debug"),
+
+  defaultMeta: {
+    service: "threatops-backend",
+  },
+
+  transports,
+
+  exitOnError: false,
+});
 
 export default logger;

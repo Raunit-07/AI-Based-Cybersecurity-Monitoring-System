@@ -15,7 +15,7 @@ export const Layout = () => {
   return (
     <div className="flex h-screen bg-background text-gray-100 font-sans">
       {/* Sidebar */}
-      <aside className="w-64 bg-surface border-r border-gray-800 flex flex-col hidden md:flex">
+      <aside className="w-64 bg-surface border-r border-gray-800 hidden md:flex flex-col">
         <div className="p-6 flex items-center gap-3">
           <Shield className="w-8 h-8 text-primary" />
           <span className="text-xl font-bold tracking-wider">THREAT<span className="text-primary">OPS</span></span>

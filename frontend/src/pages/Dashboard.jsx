@@ -6,15 +6,16 @@ import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
 import { subscribeToAlerts } from "../services/socket";
 import { fetchAlerts } from "../services/api"; // ✅ NEW
 import { useSuspiciousIPs } from "../hooks/useThreatData";
+import { useLiveTraffic } from "../hooks/useLiveTraffic";
 import ThreatTimeline from "../components/ThreatTimeline";
+import SuspiciousIPs from "../components/SuspiciousIPs";
 
 import { Shield, AlertTriangle, Activity, Database } from "lucide-react";
 
 // ================= MAIN COMPONENT =================
 export const Dashboard = () => {
   const [alerts, setAlerts] = useState([]);
-  const [trafficData, setTrafficData] = useState([]);
-  const [isConnected, setIsConnected] = useState(false);
+  const { trafficData, isConnected } = useLiveTraffic();
   const [loadingAlerts, setLoadingAlerts] = useState(true);
 
   // ================= LOAD ALERTS FROM BACKEND =================
@@ -51,8 +52,6 @@ export const Dashboard = () => {
 
         return [alert, ...prev].slice(0, 100);
       });
-
-      setIsConnected(true);
     });
 
     return () => unsubscribe();
@@ -162,6 +161,11 @@ export const Dashboard = () => {
           ) : (
             <SuspiciousIPsTable ips={safeIPs} />
           )}
+        </div>
+
+        {/* ================= ADVANCED SUSPICIOUS IP ANALYTICS ================= */}
+        <div className="w-full">
+          <SuspiciousIPs />
         </div>
 
         {/* ================= THREAT TIMELINE ================= */}
