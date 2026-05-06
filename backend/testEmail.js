@@ -9,7 +9,7 @@ const testEmail = async () => {
 
         await sendEmailAlert({
             ip: "192.168.1.1",
-            attack_type: "ddos",
+            attackType: "ddos",
             requests: 3000,
             failedLogins: 2,
             anomaly_score: 0.95,

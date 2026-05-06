@@ -47,7 +47,7 @@ export const detectThreat = async (data) => {
     return {
       is_anomaly: false,
       anomaly_score: 0,
-      attack_type: "fallback",
+      attackType: "fallback",
     };
   }
 };

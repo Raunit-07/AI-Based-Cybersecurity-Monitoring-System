@@ -18,7 +18,7 @@ const sanitizeLogData = (data) => {
 // ================= SEVERITY =================
 const getSeverity = (data, prediction) => {
   if (
-    prediction.attack_type === "ddos" ||
+    prediction.attackType === "ddos" ||
     data.requests > 2000 ||
     prediction.anomaly_score < -0.8
   ) {
@@ -26,7 +26,7 @@ const getSeverity = (data, prediction) => {
   }
 
   if (
-    prediction.attack_type === "bruteforce" ||
+    prediction.attackType === "bruteforce" ||
     data.failedLogins > 20 ||
     prediction.anomaly_score < -0.6
   ) {
@@ -53,7 +53,7 @@ const processLog = async (logData, io) => {
     let prediction = {
       is_anomaly: false,
       anomaly_score: 0,
-      attack_type: "normal",
+      attackType: "normal",
     };
 
     try {
@@ -83,11 +83,11 @@ const processLog = async (logData, io) => {
         ? "Brute Force"
         : cleanData.requests > 800
           ? "DDoS"
-          : prediction.attack_type || "Suspicious";
+          : prediction.attackType || "Suspicious";
 
     const severity = getSeverity(cleanData, {
       ...prediction,
-      attack_type: attackType.toLowerCase(),
+      attackType: attackType.toLowerCase(),
     });
 
     // ================= SAVE LOG =================
@@ -95,7 +95,7 @@ const processLog = async (logData, io) => {
       ...cleanData,
       is_anomaly: isAnomaly,
       anomaly_score: anomalyScore,
-      attack_type: attackType,
+      attackType: attackType,
     });
 
     // ================= ALERT (CLEAN PIPELINE) =================
@@ -129,7 +129,7 @@ const processLog = async (logData, io) => {
       mlResult: {
         is_anomaly: isAnomaly,
         anomaly_score: anomalyScore,
-        attack_type: attackType,
+        attackType: attackType,
         severity,
       },
       alert,

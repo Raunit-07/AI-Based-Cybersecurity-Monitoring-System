@@ -63,7 +63,7 @@ const logSchema = new mongoose.Schema(
       default: 0,
     },
 
-    attack_type: {
+    attackType: {
       type: String,
       enum: ["normal", "ddos", "bruteforce", "suspicious"],
       default: "normal",
@@ -78,6 +78,6 @@ const logSchema = new mongoose.Schema(
 
 // ================= INDEXES (PERFORMANCE) =================
 logSchema.index({ ip: 1, timestamp: -1 });
-logSchema.index({ attack_type: 1, timestamp: -1 });
+logSchema.index({ attackType: 1, timestamp: -1 });
 
 export default mongoose.model("Log", logSchema);

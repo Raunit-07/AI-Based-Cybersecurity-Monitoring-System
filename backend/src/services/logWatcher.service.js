@@ -58,7 +58,7 @@ export const startLogWatcher = (io) => {
                     const alert = {
                         ip: extractIP(line),
                         rawLog: line,
-                        attackType: result.attack_type,
+                        attackType: result.attackType,
                         anomalyScore: result.anomaly_score,
                         severity: result.is_anomaly ? "high" : "low",
                         timestamp: new Date(),

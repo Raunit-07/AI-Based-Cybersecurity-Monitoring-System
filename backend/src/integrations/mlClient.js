@@ -29,7 +29,7 @@ const analyzeThreat = async (logData) => {
       const anomalyScore = Math.round(data.anomaly_score * 100);
       return {
         anomalyScore,
-        classification: data.attack_type || 'normal',
+        classification: data.attackType || 'normal',
         threatAnalyzed: true
       };
     }

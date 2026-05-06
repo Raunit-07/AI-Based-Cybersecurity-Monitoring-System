@@ -46,7 +46,7 @@ export const sendEmailAlert = async (alert) => {
 
     // ================= SAFE DATA =================
     const ip = sanitize(alert.ip) || "Unknown IP";
-    const type = sanitize(alert.attack_type || alert.type) || "unknown";
+    const type = sanitize(alert.attackType || alert.type) || "unknown";
     const severity = getSeverity(alert);
     const requests = alert.requests ?? "N/A";
     const failedLogins = alert.failedLogins ?? "N/A";
@@ -113,11 +113,11 @@ const sanitize = (value) => {
 const getSeverity = (alert) => {
   if (!alert) return "low";
 
-  if (alert.attack_type === "ddos" || alert.requests > 2000) {
+  if (alert.attackType === "ddos" || alert.requests > 2000) {
     return "high";
   }
 
-  if (alert.attack_type === "bruteforce" || alert.failedLogins > 20) {
+  if (alert.attackType === "bruteforce" || alert.failedLogins > 20) {
     return "medium";
   }
 

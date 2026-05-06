@@ -45,7 +45,7 @@ const emitLog = (log) => {
       ip: log.ip,
       requests: log.requests,
       failedLogins: log.failedLogins,
-      attack_type: log.attack_type,
+      attackType: log.attackType,
       is_anomaly: log.is_anomaly,
       anomaly_score: log.anomaly_score,
       timestamp: log.timestamp,
@@ -66,7 +66,7 @@ const emitAlert = (alert) => {
     const formattedAlert = {
       id: alert._id || null,
       ip: alert.ip || "unknown",
-      type: alert.type || alert.attack_type || "unknown",
+      type: alert.type || alert.attackType || "unknown",
       severity: alert.severity || "low",
       requests: alert.requests || 0,
       failedLogins: alert.failedLogins || 0,
