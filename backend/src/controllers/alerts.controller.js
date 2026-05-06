@@ -170,18 +170,30 @@ const getSuspiciousIPs = catchAsync(async (req, res) => {
     50
   );
 
-  const pipeline = [
+  const suspiciousIPs = await Alert.aggregate([
+    {
+      $match: {
+        ip: { $ne: null },
+      },
+    },
+
     {
       $group: {
         _id: "$ip",
 
-        attackCount: { $sum: 1 },
-
-        maxScore: {
-          $max: "$anomalyScore",
+        attackCount: {
+          $sum: 1,
         },
 
-        lastSeen: {
+        avgAnomalyScore: {
+          $avg: "$anomalyScore",
+        },
+
+        maxAnomalyScore: {
+          $min: "$anomalyScore",
+        },
+
+        latestAttack: {
           $max: "$createdAt",
         },
 
@@ -192,63 +204,111 @@ const getSuspiciousIPs = catchAsync(async (req, res) => {
     },
 
     {
+      $project: {
+        _id: 0,
+
+        ip: "$_id",
+
+        attackCount: 1,
+
+        avgAnomalyScore: {
+          $round: ["$avgAnomalyScore", 3],
+        },
+
+        latestAttack: 1,
+
+        attackTypes: 1,
+
+        threatScore: {
+          $multiply: ["$attackCount", 10],
+        },
+
+        severity: {
+          $switch: {
+            branches: [
+              {
+                case: {
+                  $gte: ["$attackCount", 15],
+                },
+                then: "critical",
+              },
+              {
+                case: {
+                  $gte: ["$attackCount", 8],
+                },
+                then: "high",
+              },
+              {
+                case: {
+                  $gte: ["$attackCount", 3],
+                },
+                then: "medium",
+              },
+            ],
+            default: "low",
+          },
+        },
+
+        status: {
+          $cond: [
+            {
+              $lte: ["$maxAnomalyScore", -0.7],
+            },
+            "blocked",
+            "flagged",
+          ],
+        },
+      },
+    },
+
+    {
       $sort: {
-        attackCount: -1,
+        threatScore: -1,
       },
     },
 
     {
       $limit: limit,
     },
-  ];
-
-  const results = await Alert.aggregate(pipeline);
-
-  const ips = results.map((r) => ({
-    ip: r._id,
-
-    attackCount: r.attackCount,
-
-    severity: getSeverity(r.maxScore),
-
-    lastSeen: r.lastSeen,
-
-    attackTypes: r.attackTypes,
-
-    status:
-      r.maxScore < -0.7
-        ? "blocked"
-        : "flagged",
-  }));
+  ]);
 
   return apiResponse(
     res,
     200,
     true,
-    { ips },
+    {
+      ips: suspiciousIPs,
+      total: suspiciousIPs.length,
+    },
     "Suspicious IPs fetched successfully"
   );
 });
 
 // ================= ALERT STATS =================
 const getAlertStats = catchAsync(async (req, res) => {
-  const totalAlerts =
-    await Alert.countDocuments();
+  const [
+    totalAlerts,
+    activeAlerts,
+    criticalAlerts,
+    resolvedAlerts,
+    suspiciousIPs,
+  ] = await Promise.all([
+    Alert.countDocuments(),
 
-  const activeAlerts =
-    await Alert.countDocuments({
+    Alert.countDocuments({
       resolved: false,
-    });
+    }),
 
-  const criticalAlerts =
-    await Alert.countDocuments({
+    Alert.countDocuments({
       severity: "critical",
-    });
+    }),
 
-  const resolvedAlerts =
-    await Alert.countDocuments({
+    Alert.countDocuments({
       resolved: true,
-    });
+    }),
+
+    Alert.distinct("ip"),
+  ]);
 
   return apiResponse(
     res,
@@ -256,9 +316,15 @@ const getAlertStats = catchAsync(async (req, res) => {
     true,
     {
       totalAlerts,
+
       activeAlerts,
+
       criticalAlerts,
+
       resolvedAlerts,
+
+      suspiciousIPCount:
+        suspiciousIPs.length,
     },
     "Alert statistics fetched successfully"
   );
