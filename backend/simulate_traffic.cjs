@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const API_URL = "http://localhost:5000/api/logs"; // Docker internal URL
+const API_URL = "https://threatops-backend.onrender.com/api/logs"; // Docker internal URL
 
 const endpoints = ["/login", "/users", "/products", "/checkout"];
 const methods = ["GET", "POST"];

@@ -166,21 +166,18 @@ const createAlert = async (
       });
 
       io.emit("traffic_update", {
-        timestamp: new Date(),
+        time: new Date().toISOString(),
 
-        requests:
-          alert.meta?.requests || 0,
+        requests: Number(
+          alert.meta?.requests || 0
+        ),
 
         blocked:
-          alert.severity ===
-            "critical"
+          ["high", "critical"].includes(
+            alert.severity
+          )
             ? 1
             : 0,
-
-        ip: alert.ip,
-
-        attackType:
-          alert.attackType,
       });
     }
 
