@@ -24,24 +24,71 @@ const BASE_URL = getBaseURL();
 // ================= SOCKET INSTANCE =================
 let socket = null;
 
+// ================= GET AUTH TOKEN =================
+const getAuthToken = () => {
+  try {
+    return (
+      localStorage.getItem("accessToken") || ""
+    );
+  } catch {
+    return "";
+  }
+};
+
+// ================= GET USER SESSION =================
+const getStoredUser = () => {
+  try {
+    const raw =
+      localStorage.getItem(
+        "threatops_user"
+      );
+
+    if (!raw) return null;
+
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+};
+
 // ================= CREATE SOCKET =================
 const createSocket = () => {
+  const token = getAuthToken();
+
+  const user = getStoredUser();
+
   return io(BASE_URL, {
     path: "/socket.io",
 
-    // VERY IMPORTANT
+    // 🔥 IMPORTANT FOR AUTH
+    auth: {
+      token,
+      userId:
+        user?.id ||
+        user?._id ||
+        "",
+    },
+
+    // 🔥 IMPORTANT
     withCredentials: true,
 
-    transports: ["websocket", "polling"],
+    transports: [
+      "websocket",
+      "polling",
+    ],
 
     reconnection: true,
+
     reconnectionAttempts: 20,
+
     reconnectionDelay: 1000,
+
     reconnectionDelayMax: 5000,
 
     timeout: 10000,
 
     autoConnect: true,
+
     forceNew: false,
   });
 };
@@ -51,36 +98,69 @@ export const getSocket = () => {
   if (!socket) {
     socket = createSocket();
 
-    // ================= CONNECTION EVENTS =================
+    // ================= CONNECT =================
     socket.on("connect", () => {
-      console.log("✅ Socket connected:", socket.id);
+      console.log(
+        "✅ Socket connected:",
+        socket.id
+      );
     });
 
-    socket.on("disconnect", (reason) => {
-      console.warn("⚠️ Socket disconnected:", reason);
-    });
+    // ================= DISCONNECT =================
+    socket.on(
+      "disconnect",
+      (reason) => {
+        console.warn(
+          "⚠️ Socket disconnected:",
+          reason
+        );
+      }
+    );
 
-    socket.on("connect_error", (err) => {
-      console.error("❌ Socket connection error:", err.message);
-    });
+    // ================= CONNECTION ERROR =================
+    socket.on(
+      "connect_error",
+      (err) => {
+        console.error(
+          "❌ Socket connection error:",
+          err.message
+        );
+      }
+    );
 
-    socket.on("reconnect_attempt", (attempt) => {
-      console.log(`🔄 Socket reconnect attempt: ${attempt}`);
-    });
+    // ================= RECONNECT =================
+    socket.on(
+      "reconnect_attempt",
+      (attempt) => {
+        console.log(
+          `🔄 Socket reconnect attempt: ${attempt}`
+        );
+      }
+    );
 
-    socket.on("reconnect", () => {
-      console.log("✅ Socket reconnected");
-    });
+    socket.on(
+      "reconnect",
+      () => {
+        console.log(
+          "✅ Socket reconnected"
+        );
+      }
+    );
   }
 
   return socket;
 };
 
 // ================= ALERT SUBSCRIPTION =================
-export const subscribeToAlerts = (handler) => {
+export const subscribeToAlerts = (
+  handler
+) => {
   const socket = getSocket();
 
-  if (typeof handler !== "function") {
+  if (
+    typeof handler !==
+    "function"
+  ) {
     console.error(
       "❌ subscribeToAlerts requires a valid function"
     );
@@ -92,27 +172,58 @@ export const subscribeToAlerts = (handler) => {
   socket.off("new_alert");
 
   // ================= SAFE EVENT HANDLER =================
-  const safeHandler = (alert) => {
+  const safeHandler = (
+    alert
+  ) => {
     try {
-      if (!alert || typeof alert !== "object") {
+      if (
+        !alert ||
+        typeof alert !==
+        "object"
+      ) {
+        return;
+      }
+
+      // 🔥 USER VALIDATION
+      const currentUser =
+        getStoredUser();
+
+      if (
+        currentUser?.id &&
+        alert?.user &&
+        String(alert.user) !==
+        String(
+          currentUser.id
+        )
+      ) {
         return;
       }
 
       // ================= NORMALIZE ALERT =================
       const formattedAlert = {
-        id: alert._id || alert.id,
+        id:
+          alert._id ||
+          alert.id,
 
-        ip: alert.ip || "Unknown",
+        user:
+          alert.user || null,
+
+        ip:
+          alert.ip ||
+          "Unknown",
 
         attackType:
           alert.attackType ||
           alert.attack_type ||
           "Suspicious",
 
-        severity: alert.severity || "medium",
+        severity:
+          alert.severity ||
+          "medium",
 
         anomalyScore:
-          typeof alert.anomalyScore === "number"
+          typeof alert.anomalyScore ===
+            "number"
             ? alert.anomalyScore
             : 0,
 
@@ -122,10 +233,13 @@ export const subscribeToAlerts = (handler) => {
           new Date().toISOString(),
 
         message:
-          alert.message || "Threat activity detected",
+          alert.message ||
+          "Threat activity detected",
       };
 
-      handler(formattedAlert);
+      handler(
+        formattedAlert
+      );
     } catch (err) {
       console.error(
         "❌ Error handling socket alert:",
@@ -134,30 +248,54 @@ export const subscribeToAlerts = (handler) => {
     }
   };
 
-  // ================= MAIN ALERT EVENT =================
-  socket.on("new_alert", safeHandler);
+  // ================= ALERT EVENTS =================
+  socket.on(
+    "new_alert",
+    safeHandler
+  );
 
-  // ================= OPTIONAL EVENTS =================
-  socket.on("alert_created", safeHandler);
+  socket.on(
+    "alert_created",
+    safeHandler
+  );
 
-  socket.on("threat_detected", safeHandler);
+  socket.on(
+    "threat_detected",
+    safeHandler
+  );
 
   // ================= CLEANUP =================
   return () => {
-    socket.off("new_alert", safeHandler);
-    socket.off("alert_created", safeHandler);
-    socket.off("threat_detected", safeHandler);
+    socket.off(
+      "new_alert",
+      safeHandler
+    );
+
+    socket.off(
+      "alert_created",
+      safeHandler
+    );
+
+    socket.off(
+      "threat_detected",
+      safeHandler
+    );
   };
 };
 
 // ================= CONNECTION STATE =================
-export const isSocketConnected = () => {
-  return socket?.connected ?? false;
-};
+export const isSocketConnected =
+  () => {
+    return (
+      socket?.connected ??
+      false
+    );
+  };
 
 // ================= MANUAL CONNECT =================
 export const connectSocket = () => {
-  const socket = getSocket();
+  const socket =
+    getSocket();
 
   if (!socket.connected) {
     socket.connect();
@@ -167,16 +305,19 @@ export const connectSocket = () => {
 };
 
 // ================= CLEAN DISCONNECT =================
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.removeAllListeners();
+export const disconnectSocket =
+  () => {
+    if (socket) {
+      socket.removeAllListeners();
 
-    socket.disconnect();
+      socket.disconnect();
 
-    socket = null;
+      socket = null;
 
-    console.log("🛑 Socket disconnected cleanly");
-  }
-};
+      console.log(
+        "🛑 Socket disconnected cleanly"
+      );
+    }
+  };
 
 export default getSocket;

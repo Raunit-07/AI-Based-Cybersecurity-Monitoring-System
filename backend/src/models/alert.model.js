@@ -7,7 +7,7 @@ const alertSchema = new mongoose.Schema(
     user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
+      required: [true, "Alert owner is required"],
       index: true,
     },
 
@@ -95,6 +95,7 @@ const alertSchema = new mongoose.Schema(
     message: {
       type: String,
       trim: true,
+      maxlength: 500,
       default: "Threat detected",
     },
 
@@ -102,6 +103,7 @@ const alertSchema = new mongoose.Schema(
     rawLog: {
       type: String,
       trim: true,
+      maxlength: 5000,
       default: "",
     },
 
@@ -131,6 +133,7 @@ const alertSchema = new mongoose.Schema(
       type: String,
       default: "nginx",
       trim: true,
+      maxlength: 100,
     },
 
     // ================= GEOLOCATION =================
@@ -138,11 +141,13 @@ const alertSchema = new mongoose.Schema(
       country: {
         type: String,
         default: "",
+        trim: true,
       },
 
       city: {
         type: String,
         default: "",
+        trim: true,
       },
     },
 
@@ -150,11 +155,13 @@ const alertSchema = new mongoose.Schema(
     meta: {
       requests: {
         type: Number,
+        min: 0,
         default: 0,
       },
 
       failedLogins: {
         type: Number,
+        min: 0,
         default: 0,
       },
 
@@ -191,16 +198,19 @@ alertSchema.index({
 });
 
 alertSchema.index({
+  user: 1,
   severity: 1,
   createdAt: -1,
 });
 
 alertSchema.index({
+  user: 1,
   attackType: 1,
   createdAt: -1,
 });
 
 alertSchema.index({
+  user: 1,
   status: 1,
   resolved: 1,
 });

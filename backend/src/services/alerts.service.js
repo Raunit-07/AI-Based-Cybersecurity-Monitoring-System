@@ -142,8 +142,16 @@ const createAlert = async (
       });
 
     // ================= SOCKET EMIT =================
-    if (io) {
-      io.emit("new_alert", {
+    if (
+      io &&
+      alert.user
+    ) {
+      // ================= SAFE ROOM ID =================
+      const roomId =
+        alert.user.toString();
+
+      // ================= ALERT PAYLOAD =================
+      const alertPayload = {
         id: alert._id,
 
         user: alert.user,
@@ -163,10 +171,12 @@ const createAlert = async (
           alert.timestamp,
 
         meta: alert.meta,
-      });
+      };
 
-      io.emit("traffic_update", {
-        time: new Date().toISOString(),
+      // ================= TRAFFIC PAYLOAD =================
+      const trafficPayload = {
+        time:
+          new Date().toISOString(),
 
         requests: Number(
           alert.meta?.requests || 0
@@ -178,7 +188,19 @@ const createAlert = async (
           )
             ? 1
             : 0,
-      });
+      };
+
+      // ================= PRIVATE ALERT EVENT =================
+      io.to(roomId).emit(
+        "new_alert",
+        alertPayload
+      );
+
+      // ================= PRIVATE TRAFFIC EVENT =================
+      io.to(roomId).emit(
+        "traffic_update",
+        trafficPayload
+      );
     }
 
     // ================= ALERT INTEGRATIONS =================

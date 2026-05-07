@@ -1,8 +1,10 @@
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 const userSchema = new mongoose.Schema(
   {
+    // ================= EMAIL =================
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -12,63 +14,112 @@ const userSchema = new mongoose.Schema(
       index: true,
     },
 
+    // ================= PASSWORD =================
     password: {
       type: String,
       required: [true, "Password is required"],
-      minlength: [6, "Password must be at least 6 characters long"],
+
+      minlength: [
+        6,
+        "Password must be at least 6 characters long",
+      ],
+
       select: false,
     },
 
+    // ================= ROLE =================
     role: {
       type: String,
+
       enum: ["user", "admin"],
+
       default: "user",
     },
 
+    // ================= USER API KEY =================
+    apiKey: {
+      type: String,
+      unique: true,
+      index: true,
+      select: false,
+    },
+
+    // ================= REFRESH TOKEN =================
     refreshToken: {
       type: String,
       default: null,
       select: false,
     },
   },
+
   {
     timestamps: true,
+    versionKey: false,
   }
 );
 
 /**
- * ================= HASH PASSWORD =================
+ * ================= HASH PASSWORD + GENERATE API KEY =================
  */
 userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
 
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
+  // ================= HASH PASSWORD =================
+  if (this.isModified("password")) {
+
+    const salt = await bcrypt.genSalt(12);
+
+    this.password = await bcrypt.hash(
+      this.password,
+      salt
+    );
+  }
+
+  // ================= GENERATE API KEY =================
+  if (!this.apiKey) {
+
+    this.apiKey = crypto
+      .randomBytes(32)
+      .toString("hex");
+  }
 });
 
 /**
  * ================= COMPARE PASSWORD =================
  */
-userSchema.methods.comparePassword = async function (candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
+userSchema.methods.comparePassword =
+  async function (candidatePassword) {
+
+    if (!candidatePassword || !this.password) {
+      return false;
+    }
+
+    return bcrypt.compare(
+      candidatePassword,
+      this.password
+    );
+  };
 
 /**
- * ================= JSON SANITIZER =================
+ * ================= SAFE JSON OUTPUT =================
  */
-userSchema.methods.toJSON = function () {
-  const user = this.toObject();
+userSchema.methods.toJSON =
+  function () {
 
-  delete user.password;
-  delete user.refreshToken;
-  delete user.__v;
+    const user = this.toObject();
 
-  return user;
-};
+    delete user.password;
+    delete user.refreshToken;
+    delete user.apiKey;
+    delete user.__v;
+
+    return user;
+  };
 
 /**
- * ================= MODEL EXPORT =================
+ * ================= SAFE MODEL EXPORT =================
  */
-const User = mongoose.models.User || mongoose.model("User", userSchema);
+const User =
+  mongoose.models.User ||
+  mongoose.model("User", userSchema);
 
 export default User;
