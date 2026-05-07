@@ -8,7 +8,15 @@ import React, {
 
 import { useLocation } from "react-router-dom";
 
+import {
+  useQueryClient,
+} from "@tanstack/react-query";
+
 import api from "../services/api";
+
+import {
+  disconnectSocket,
+} from "../services/socket";
 
 const AuthContext = createContext(null);
 
@@ -21,6 +29,9 @@ export const AuthProvider = ({
   children,
 }) => {
   const location = useLocation();
+
+  const queryClient =
+    useQueryClient();
 
   // ================= STATE =================
   const [user, setUser] =
@@ -46,7 +57,7 @@ export const AuthProvider = ({
   ) => {
     if (!userData) return;
 
-    // 🔥 Store safe user data
+    // ✅ Store only safe fields
     localStorage.setItem(
       "threatops_user",
       JSON.stringify({
@@ -56,10 +67,6 @@ export const AuthProvider = ({
 
         email:
           userData.email,
-
-        apiKey:
-          userData.apiKey ||
-          "",
 
         role:
           userData.role ||
@@ -97,16 +104,18 @@ export const AuthProvider = ({
           res?.success &&
           res?.data?.user
         ) {
-          setUser(
-            res.data.user
-          );
+          const userData =
+            res.data.user;
 
-          // 🔥 Persist user session
+          setUser(userData);
+
+          // ✅ Persist safe session
           storeUserSession(
-            res.data.user
+            userData
           );
         } else {
           setUser(null);
+
           clearUserSession();
         }
       } catch {
@@ -157,7 +166,6 @@ export const AuthProvider = ({
 
         setUser(userData);
 
-        // 🔥 Save session locally
         storeUserSession(
           userData
         );
@@ -181,7 +189,7 @@ export const AuthProvider = ({
     } catch (err) {
       const message =
         err?.message ||
-        "Invalid credentials, try again";
+        "Invalid credentials";
 
       setError(message);
 
@@ -223,16 +231,13 @@ export const AuthProvider = ({
         );
 
       if (res?.success) {
-        // 🔥 Auto-login
-        if (
-          res?.data?.user
-        ) {
-          const userData =
-            res.data.user;
+        const userData =
+          res?.data?.user ||
+          null;
 
+        if (userData) {
           setUser(userData);
 
-          // 🔥 Persist session
           storeUserSession(
             userData
           );
@@ -240,15 +245,10 @@ export const AuthProvider = ({
 
         return {
           success: true,
-
           message:
             res?.message ||
             "Registration successful",
-
-          user:
-            res?.data
-              ?.user ||
-            null,
+          user: userData,
         };
       }
 
@@ -292,14 +292,21 @@ export const AuthProvider = ({
         "/auth/logout"
       );
     } catch {
-      // Ignore backend logout failure
+      // Ignore backend failure
     } finally {
+      // ✅ Clear frontend auth state
       setUser(null);
 
       setError(null);
 
-      // 🔥 Clear local session
+      // ✅ Remove local storage
       clearUserSession();
+
+      // ✅ CRITICAL: clear React Query cache
+      queryClient.clear();
+
+      // ✅ CRITICAL: disconnect socket
+      disconnectSocket();
 
       setAuthLoading(false);
     }

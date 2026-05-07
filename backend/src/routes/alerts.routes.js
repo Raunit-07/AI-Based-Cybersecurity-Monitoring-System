@@ -1,35 +1,56 @@
 import express from "express";
+
 import alertsController from "../controllers/alerts.controller.js";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
+
+import {
+    authMiddleware,
+} from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
 /**
+ * ================= GLOBAL AUTH PROTECTION =================
+ * ALL alert routes require authentication
+ */
+router.use(authMiddleware);
+
+/**
  * ================= ALERT ROUTES =================
- * All routes are protected (auth required)
  */
 
-// ✅ Get alerts (pagination + filtering)
+/**
+ * ================= GET ALERTS =================
+ * Supports:
+ * - pagination
+ * - filtering
+ */
+router.get(
+    "/",
+    alertsController.getAlerts
+);
+
+/**
+ * ================= THREAT TIMELINE =================
+ */
+router.get(
+    "/timeline",
+    alertsController.getThreatTimeline
+);
+
+/**
+ * ================= SUSPICIOUS IPS =================
+ */
 router.get(
     "/suspicious-ips",
     alertsController.getSuspiciousIPs
 );
-router.get("/", authMiddleware, alertsController.getAlerts);
-router.get("/timeline", alertsController.getThreatTimeline);
 
-
-// ✅ Resolve alert
+/**
+ * ================= RESOLVE ALERT =================
+ */
 router.patch(
     "/:id/resolve",
-    authMiddleware,
     alertsController.resolveAlert
-);
-
-// ✅ Suspicious IPs
-router.get(
-    "/suspicious-ips",
-    authMiddleware,
-    alertsController.getSuspiciousIPs
 );
 
 export default router;

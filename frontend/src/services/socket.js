@@ -9,7 +9,7 @@ const getBaseURL = () => {
       const url = new URL(envUrl);
 
       return `${url.protocol}//${url.host}`;
-    } catch (err) {
+    } catch {
       console.warn(
         "⚠️ Invalid VITE_API_URL, falling back to localhost"
       );
@@ -23,17 +23,6 @@ const BASE_URL = getBaseURL();
 
 // ================= SOCKET INSTANCE =================
 let socket = null;
-
-// ================= GET AUTH TOKEN =================
-const getAuthToken = () => {
-  try {
-    return (
-      localStorage.getItem("accessToken") || ""
-    );
-  } catch {
-    return "";
-  }
-};
 
 // ================= GET USER SESSION =================
 const getStoredUser = () => {
@@ -53,24 +42,27 @@ const getStoredUser = () => {
 
 // ================= CREATE SOCKET =================
 const createSocket = () => {
-  const token = getAuthToken();
-
   const user = getStoredUser();
 
   return io(BASE_URL, {
     path: "/socket.io",
 
-    // 🔥 IMPORTANT FOR AUTH
+    /**
+     * ✅ IMPORTANT
+     * Use cookie-based auth
+     * instead of localStorage tokens
+     */
+    withCredentials: true,
+
+    /**
+     * ✅ Only send safe metadata
+     */
     auth: {
-      token,
       userId:
         user?.id ||
         user?._id ||
         "",
     },
-
-    // 🔥 IMPORTANT
-    withCredentials: true,
 
     transports: [
       "websocket",
@@ -168,9 +160,6 @@ export const subscribeToAlerts = (
     return () => { };
   }
 
-  // ================= CLEAN OLD LISTENERS =================
-  socket.off("new_alert");
-
   // ================= SAFE EVENT HANDLER =================
   const safeHandler = (
     alert
@@ -184,7 +173,7 @@ export const subscribeToAlerts = (
         return;
       }
 
-      // 🔥 USER VALIDATION
+      // ================= USER VALIDATION =================
       const currentUser =
         getStoredUser();
 
@@ -248,19 +237,12 @@ export const subscribeToAlerts = (
     }
   };
 
-  // ================= ALERT EVENTS =================
+  // ================= CLEAN OLD LISTENERS =================
+  socket.off("new_alert");
+
+  // ================= REGISTER EVENTS =================
   socket.on(
     "new_alert",
-    safeHandler
-  );
-
-  socket.on(
-    "alert_created",
-    safeHandler
-  );
-
-  socket.on(
-    "threat_detected",
     safeHandler
   );
 
@@ -268,16 +250,6 @@ export const subscribeToAlerts = (
   return () => {
     socket.off(
       "new_alert",
-      safeHandler
-    );
-
-    socket.off(
-      "alert_created",
-      safeHandler
-    );
-
-    socket.off(
-      "threat_detected",
       safeHandler
     );
   };

@@ -1,36 +1,78 @@
 import Log from "../models/log.model.js";
+
 import { createAlert } from "./alerts.service.js";
+
 import { detectThreat } from "./mlClient.js";
 
-// ================= UTILS =================
+import logger from "../utils/logger.js";
+
+/**
+ * ================= NORMALIZE ATTACK TYPE =================
+ */
 const normalizeAttackType = (type) => {
   if (!type) return "Normal";
+
   const t = String(type).toLowerCase().trim();
+
   if (t.includes("ddos")) return "DDoS";
-  if (t.includes("brute") || t.includes("force")) return "Brute Force";
-  if (t.includes("scan") || t.includes("port")) return "Port Scan";
-  if (t.includes("sql") || t.includes("inject")) return "SQL Injection";
+
+  if (t.includes("brute") || t.includes("force"))
+    return "Brute Force";
+
+  if (t.includes("scan") || t.includes("port"))
+    return "Port Scan";
+
+  if (t.includes("sql") || t.includes("inject"))
+    return "SQL Injection";
+
   if (t.includes("xss")) return "XSS";
+
   if (t.includes("malware")) return "Malware";
-  if (t.includes("suspicious")) return "Suspicious";
+
+  if (t.includes("suspicious"))
+    return "Suspicious";
+
   if (t.includes("normal")) return "Normal";
+
   return "Suspicious";
 };
 
-// ================= VALIDATION =================
+/**
+ * ================= SANITIZE LOG DATA =================
+ */
 const sanitizeLogData = (data) => {
   return {
     ip: String(data.ip || "").trim(),
-    requests: Math.max(0, Number(data.requests) || 0),
-    failedLogins: Math.max(0, Number(data.failedLogins) || 0),
-    endpoint: String(data.endpoint || "/unknown"),
+
+    requests: Math.max(
+      0,
+      Number(data.requests) || 0
+    ),
+
+    failedLogins: Math.max(
+      0,
+      Number(data.failedLogins) || 0
+    ),
+
+    endpoint: String(
+      data.endpoint || "/unknown"
+    ),
+
     method: String(data.method || "GET"),
-    timestamp: data.timestamp ? new Date(data.timestamp) : new Date(),
-    user_agent: String(data.user_agent || "unknown"),
+
+    timestamp: data.timestamp
+      ? new Date(data.timestamp)
+      : new Date(),
+
+    user_agent: String(
+      data.user_agent || "unknown"
+    ),
   };
 };
 
-// ================= SEVERITY =================
+/**
+ * ================= DETERMINE SEVERITY =================
+ */
 const getSeverity = (data, prediction) => {
   if (
     prediction.attackType === "ddos" ||
@@ -55,16 +97,35 @@ const getSeverity = (data, prediction) => {
   return "low";
 };
 
-// ================= MAIN PROCESS =================
-const processLog = async (logData, io) => {
+/**
+ * ================= MAIN PROCESS =================
+ * Multi-user SaaS safe
+ */
+const processLog = async (
+  logData,
+  io,
+  userId
+) => {
   try {
+    /**
+     * ================= VALIDATION =================
+     */
     if (!logData || !logData.ip) {
       throw new Error("Invalid log data");
     }
 
-    const cleanData = sanitizeLogData(logData);
+    if (!userId) {
+      throw new Error(
+        "Missing userId in processLog"
+      );
+    }
 
-    // ================= ML DETECTION =================
+    const cleanData =
+      sanitizeLogData(logData);
+
+    /**
+     * ================= ML DETECTION =================
+     */
     let prediction = {
       is_anomaly: false,
       anomaly_score: 0,
@@ -74,92 +135,169 @@ const processLog = async (logData, io) => {
     try {
       const mlResponse = await detectThreat({
         ip: cleanData.ip,
+
         requests: cleanData.requests,
-        failedLogins: cleanData.failedLogins,
+
+        failedLogins:
+          cleanData.failedLogins,
+
         method: cleanData.method,
+
         endpoint: cleanData.endpoint,
       });
 
-      prediction = mlResponse?.data || mlResponse || prediction;
+      prediction =
+        mlResponse?.data ||
+        mlResponse ||
+        prediction;
     } catch (error) {
-      console.error("❌ ML Error:", error.message);
+      logger.error(
+        `❌ ML Error: ${error.message}`
+      );
     }
 
-    // ================= HYBRID DECISION =================
+    /**
+     * ================= HYBRID DETECTION =================
+     */
     const isAnomaly =
       prediction.is_anomaly === true ||
       cleanData.requests > 800 ||
       cleanData.failedLogins > 10;
 
-    const anomalyScore = Number(prediction.anomaly_score) || 0;
+    const anomalyScore =
+      Number(prediction.anomaly_score) ||
+      0;
 
+    /**
+     * ================= DETERMINE ATTACK TYPE =================
+     */
     let rawAttackType = "Normal";
+
     if (cleanData.failedLogins > 10) {
       rawAttackType = "Brute Force";
-    } else if (cleanData.requests > 800) {
+    } else if (
+      cleanData.requests > 800
+    ) {
       rawAttackType = "DDoS";
-    } else if (prediction.attackType && prediction.attackType !== "normal") {
-      rawAttackType = prediction.attackType;
+    } else if (
+      prediction.attackType &&
+      prediction.attackType !== "normal"
+    ) {
+      rawAttackType =
+        prediction.attackType;
     } else if (isAnomaly) {
       rawAttackType = "Suspicious";
     }
 
-    const attackType = normalizeAttackType(rawAttackType);
+    const attackType =
+      normalizeAttackType(
+        rawAttackType
+      );
 
-    const severity = getSeverity(cleanData, {
-      ...prediction,
-      attackType: attackType.toLowerCase().replace(/\s+/g, ""),
-    });
+    const severity = getSeverity(
+      cleanData,
+      {
+        ...prediction,
 
-    // ================= SAVE LOG =================
+        attackType: attackType
+          .toLowerCase()
+          .replace(/\s+/g, ""),
+      }
+    );
+
+    /**
+     * ================= SAVE LOG =================
+     * Multi-user ownership
+     */
     const log = await Log.create({
       ...cleanData,
+
+      user: userId,
+
       is_anomaly: isAnomaly,
+
       anomaly_score: anomalyScore,
-      attackType: attackType,
+
+      attackType,
     });
 
-    // ================= ALERT (CLEAN PIPELINE) =================
+    /**
+     * ================= CREATE ALERT =================
+     */
     let alert = null;
 
     if (isAnomaly) {
       alert = await createAlert(
         {
           ip: log.ip,
+
           anomalyScore,
+
           attackType,
+
           severity,
+
           requests: log.requests,
-          failedLogins: log.failedLogins,
+
+          failedLogins:
+            log.failedLogins,
+
           timestamp: new Date(),
         },
-        io // 🔥 IMPORTANT: pass socket here
+
+        io,
+
+        userId // ✅ IMPORTANT
       );
     }
 
-    // ================= REAL-TIME TRAFFIC =================
+    /**
+     * ================= REAL-TIME TRAFFIC =================
+     * USER-SCOPED
+     */
     if (io) {
-      io.emit("traffic_update", {
-        requests: log.requests,
-        blocked: isAnomaly ? 1 : 0,
-        timestamp: Date.now(),
-        ip: log.ip,
-        attackType: attackType || "Normal",
-      });
+      io.to(userId).emit(
+        "traffic_update",
+        {
+          requests: log.requests,
+
+          blocked: isAnomaly ? 1 : 0,
+
+          timestamp: Date.now(),
+
+          ip: log.ip,
+
+          attackType:
+            attackType || "Normal",
+        }
+      );
     }
+
+    logger.info(
+      `✅ Log processed for user: ${userId}`
+    );
 
     return {
       log,
+
       mlResult: {
         is_anomaly: isAnomaly,
-        anomaly_score: anomalyScore,
-        attackType: attackType,
+
+        anomaly_score:
+          anomalyScore,
+
+        attackType,
+
         severity,
       },
+
       alert,
     };
   } catch (error) {
-    console.error("❌ processLog Error:", error.message);
+    logger.error(
+      `❌ processLog Error: ${error.message}`
+    );
+
     throw error;
   }
 };

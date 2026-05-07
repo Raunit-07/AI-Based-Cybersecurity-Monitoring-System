@@ -6,48 +6,51 @@ import { sendEmailAlert } from "../integrations/email.js";
 
 import validator from "validator";
 
-// ================= UTILS =================
-const normalizeAttackType = (
-  type
-) => {
-  if (!type)
-    return "Suspicious";
+import logger from "../utils/logger.js";
+
+/**
+ * ================= NORMALIZE ATTACK TYPE =================
+ */
+const normalizeAttackType = (type) => {
+  if (!type) return "Suspicious";
 
   const t = String(type)
     .toLowerCase()
     .trim();
 
-  if (t.includes("ddos"))
-    return "DDoS";
+  if (t.includes("ddos")) return "DDoS";
 
   if (
     t.includes("brute") ||
     t.includes("force")
-  )
+  ) {
     return "Brute Force";
+  }
 
   if (
     t.includes("scan") ||
     t.includes("port")
-  )
+  ) {
     return "Port Scan";
+  }
 
   if (
     t.includes("sql") ||
     t.includes("inject")
-  )
+  ) {
     return "SQL Injection";
+  }
 
-  if (t.includes("xss"))
-    return "XSS";
+  if (t.includes("xss")) return "XSS";
 
   if (t.includes("malware"))
     return "Malware";
 
   if (
     t.includes("suspicious")
-  )
+  ) {
     return "Suspicious";
+  }
 
   if (t.includes("normal"))
     return "Normal";
@@ -55,14 +58,25 @@ const normalizeAttackType = (
   return "Suspicious";
 };
 
-// ================= CREATE ALERT =================
+/**
+ * ================= CREATE ALERT =================
+ * Multi-user SaaS safe
+ */
 const createAlert = async (
   alertData = {},
   io = null,
   userId = null
 ) => {
   try {
-    // 🔒 VALIDATION
+    /**
+     * ================= VALIDATION =================
+     */
+    if (!userId) {
+      throw new Error(
+        "Missing alert owner"
+      );
+    }
+
     if (
       !alertData.ip ||
       !validator.isIP(
@@ -74,14 +88,15 @@ const createAlert = async (
       );
     }
 
-    // 🔒 SANITIZE INPUT
+    /**
+     * ================= SANITIZE =================
+     */
     const ip = String(
       alertData.ip
     ).trim();
 
     const anomalyScore = Number(
-      alertData.anomalyScore ??
-      0
+      alertData.anomalyScore ?? 0
     );
 
     const attackType =
@@ -89,14 +104,15 @@ const createAlert = async (
         alertData.attackType
       );
 
-    // normalize type
     const normalizedType =
       attackType
         .toLowerCase()
         .replace(/\s+/g, "") ||
       "unknown";
 
-    // 🔥 AUTO SEVERITY
+    /**
+     * ================= AUTO SEVERITY =================
+     */
     const severity =
       alertData.severity ||
       (anomalyScore < -0.8
@@ -107,10 +123,11 @@ const createAlert = async (
             ? "medium"
             : "low");
 
-    // ================= CREATE ALERT =================
+    /**
+     * ================= CREATE ALERT =================
+     */
     const alert =
       await Alert.create({
-        // ✅ USER OWNER
         user: userId,
 
         ip,
@@ -119,7 +136,6 @@ const createAlert = async (
 
         attackType,
 
-        // backward compatibility
         type:
           alertData.type ||
           normalizedType,
@@ -128,12 +144,14 @@ const createAlert = async (
 
         meta: {
           requests:
-            alertData.requests ||
-            0,
+            Number(
+              alertData.requests
+            ) || 0,
 
           failedLogins:
-            alertData.failedLogins ||
-            0,
+            Number(
+              alertData.failedLogins
+            ) || 0,
         },
 
         timestamp:
@@ -141,20 +159,15 @@ const createAlert = async (
           new Date(),
       });
 
-    // ================= SOCKET EMIT =================
-    if (
-      io &&
-      alert.user
-    ) {
-      // ================= SAFE ROOM ID =================
+    /**
+     * ================= SOCKET EVENTS =================
+     */
+    if (io) {
       const roomId =
-        alert.user.toString();
+        userId.toString();
 
-      // ================= ALERT PAYLOAD =================
       const alertPayload = {
         id: alert._id,
-
-        user: alert.user,
 
         ip: alert.ip,
 
@@ -173,14 +186,12 @@ const createAlert = async (
         meta: alert.meta,
       };
 
-      // ================= TRAFFIC PAYLOAD =================
       const trafficPayload = {
         time:
           new Date().toISOString(),
 
-        requests: Number(
-          alert.meta?.requests || 0
-        ),
+        requests:
+          alert.meta?.requests || 0,
 
         blocked:
           ["high", "critical"].includes(
@@ -190,41 +201,34 @@ const createAlert = async (
             : 0,
       };
 
-      // ================= PRIVATE ALERT EVENT =================
       io.to(roomId).emit(
         "new_alert",
         alertPayload
       );
 
-      // ================= PRIVATE TRAFFIC EVENT =================
       io.to(roomId).emit(
         "traffic_update",
         trafficPayload
       );
     }
 
-    // ================= ALERT INTEGRATIONS =================
+    /**
+     * ================= ALERT INTEGRATIONS =================
+     */
     if (
       ["high", "critical"].includes(
         alert.severity
       )
     ) {
       try {
-        // ✅ FIND ALERT OWNER
-        let user = null;
-
-        if (alert.user) {
-          user =
-            await User.findById(
-              alert.user
-            ).lean();
-        }
+        const user =
+          await User.findById(
+            userId
+          ).lean();
 
         await Promise.allSettled([
-          // Slack
           sendSlackAlert(alert),
 
-          // Email to alert owner
           sendEmailAlert({
             ...alert.toObject(),
 
@@ -233,33 +237,44 @@ const createAlert = async (
           }),
         ]);
       } catch (integrationError) {
-        console.error(
-          "❌ Alert integration error:",
-          integrationError.message
+        logger.error(
+          `❌ Alert integration error: ${integrationError.message}`
         );
       }
     }
 
+    logger.info(
+      `✅ Alert created for user: ${userId}`
+    );
+
     return alert;
   } catch (error) {
-    console.error(
-      "❌ createAlert error:",
-      error.message
+    logger.error(
+      `❌ createAlert error: ${error.message}`
     );
 
     throw error;
   }
 };
 
-// ================= GET ALERTS =================
+/**
+ * ================= GET ALERTS =================
+ * Enforced tenant isolation
+ */
 const getAlerts = async (
+  userId,
   query = {},
   options = {}
 ) => {
   try {
+    if (!userId) {
+      throw new Error(
+        "Missing userId"
+      );
+    }
+
     const limit = Math.min(
-      Number(options.limit) ||
-      50,
+      Number(options.limit) || 50,
       100
     );
 
@@ -268,8 +283,17 @@ const getAlerts = async (
       0
     );
 
+    /**
+     * ================= FORCE TENANT FILTER =================
+     */
+    const safeQuery = {
+      ...query,
+
+      user: userId,
+    };
+
     const alerts =
-      await Alert.find(query)
+      await Alert.find(safeQuery)
         .sort({
           createdAt: -1,
         })
@@ -279,7 +303,7 @@ const getAlerts = async (
 
     const total =
       await Alert.countDocuments(
-        query
+        safeQuery
       );
 
     return {
@@ -290,18 +314,21 @@ const getAlerts = async (
       total,
     };
   } catch (error) {
-    console.error(
-      "❌ getAlerts error:",
-      error.message
+    logger.error(
+      `❌ getAlerts error: ${error.message}`
     );
 
     throw error;
   }
 };
 
-// ================= RESOLVE ALERT =================
+/**
+ * ================= RESOLVE ALERT =================
+ * Tenant-safe update
+ */
 const resolveAlert = async (
-  alertId
+  alertId,
+  userId
 ) => {
   try {
     if (!alertId) {
@@ -310,12 +337,26 @@ const resolveAlert = async (
       );
     }
 
+    if (!userId) {
+      throw new Error(
+        "User ID required"
+      );
+    }
+
     const alert =
-      await Alert.findByIdAndUpdate(
-        alertId,
+      await Alert.findOneAndUpdate(
+        {
+          _id: alertId,
+
+          user: userId,
+        },
+
         {
           resolved: true,
+
+          status: "resolved",
         },
+
         {
           new: true,
         }
@@ -323,16 +364,17 @@ const resolveAlert = async (
 
     return alert;
   } catch (error) {
-    console.error(
-      "❌ resolveAlert error:",
-      error.message
+    logger.error(
+      `❌ resolveAlert error: ${error.message}`
     );
 
     throw error;
   }
 };
 
-// ================= EXPORTS =================
+/**
+ * ================= EXPORTS =================
+ */
 export {
   createAlert,
   getAlerts,

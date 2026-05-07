@@ -8,6 +8,8 @@ import { getSocket } from "../services/socket";
 
 import { useQueryClient } from "@tanstack/react-query";
 
+import { useAuth } from "./useAuth";
+
 /**
  * =====================================
  * LIVE TRAFFIC HOOK
@@ -25,7 +27,13 @@ export const useLiveTraffic = () => {
 
   const socketRef = useRef(null);
 
+  // ✅ Current logged-in user
+  const { user } = useAuth();
+
   useEffect(() => {
+    // ✅ Prevent socket init before auth
+    if (!user?.id) return;
+
     const socket = getSocket();
 
     if (!socket) {
@@ -82,35 +90,37 @@ export const useLiveTraffic = () => {
         return;
       }
 
+      // ✅ Multi-user protection
+      if (
+        data.user &&
+        data.user !== user.id
+      ) {
+        return;
+      }
+
       const safeRequests =
         Math.max(
           0,
-          Number(data.requests) ||
-          0
+          Number(data.requests) || 0
         );
 
       const safeBlocked =
         Math.max(
           0,
-          Number(data.blocked) ||
-          0
+          Number(data.blocked) || 0
         );
 
       const trafficPoint = {
-        // Chart timestamp
         time:
           data.timestamp ||
           Date.now(),
 
-        // Main traffic
         requests:
           safeRequests,
 
-        // Blocked traffic
         blocked:
           safeBlocked,
 
-        // Extra metadata
         ip: data.ip || "",
 
         attackType:
@@ -119,13 +129,22 @@ export const useLiveTraffic = () => {
       };
 
       setTrafficData((prev) => {
-        const updated = [
+        return [
           ...prev.slice(-19),
           trafficPoint,
         ];
-
-        return updated;
       });
+
+      // ✅ User-scoped cache
+      queryClient.setQueryData(
+        ["traffic", user.id],
+        (oldData = []) => {
+          return [
+            ...oldData.slice(-19),
+            trafficPoint,
+          ];
+        }
+      );
     };
 
     // ================= ALERTS =================
@@ -148,6 +167,14 @@ export const useLiveTraffic = () => {
           alert
         );
 
+        return;
+      }
+
+      // ✅ Multi-user isolation
+      if (
+        alert.user &&
+        alert.user !== user.id
+      ) {
         return;
       }
 
@@ -176,9 +203,9 @@ export const useLiveTraffic = () => {
         status: "active",
       };
 
-      // ================= UPDATE CACHE =================
+      // ✅ USER-SCOPED CACHE
       queryClient.setQueryData(
-        ["alerts"],
+        ["alerts", user.id],
         (oldData) => {
           const safeOld =
             Array.isArray(
@@ -246,7 +273,7 @@ export const useLiveTraffic = () => {
         handleNewAlert
       );
     };
-  }, [queryClient]);
+  }, [queryClient, user?.id]);
 
   return {
     trafficData,

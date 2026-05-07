@@ -1,18 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import api from "../services/api";
+import { useAuth } from "./useAuth";
 
 // ================= ALERTS =================
 export const useAlerts = () => {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: ["alerts"],
+    // ✅ Multi-user safe cache
+    queryKey: ["alerts", user?.id],
+
+    // ✅ Only fetch if user exists
+    enabled: !!user?.id,
 
     queryFn: async () => {
       const res = await api.get("/alerts");
 
-      // After interceptor unwrap: res = {success, data: {alerts, total}, message}
+      // Backend normalized response
       const alerts =
-        res?.data?.alerts ||   // preferred backend format
-        res?.data ||           // fallback
+        res?.data?.alerts ||
+        res?.data ||
         [];
 
       return Array.isArray(alerts) ? alerts : [];
@@ -20,8 +27,10 @@ export const useAlerts = () => {
 
     staleTime: 60000,
 
-    // ✅ Prevent UI crash
+    // ✅ Prevent UI crashes
     retry: 2,
+
+    refetchOnWindowFocus: false,
 
     onError: (error) => {
       console.error("Error fetching alerts:", error.message);
@@ -31,13 +40,18 @@ export const useAlerts = () => {
 
 // ================= SUSPICIOUS IPS =================
 export const useSuspiciousIPs = () => {
+  const { user } = useAuth();
+
   return useQuery({
-    queryKey: ["ips"],
+    // ✅ Multi-user safe cache
+    queryKey: ["ips", user?.id],
+
+    // ✅ Prevent unauthorized fetches
+    enabled: !!user?.id,
 
     queryFn: async () => {
       const res = await api.get("/ips");
 
-      // After interceptor unwrap: res = {success, data: {ips}, message}
       const ips =
         res?.data?.ips ||
         res?.data ||
@@ -47,7 +61,10 @@ export const useSuspiciousIPs = () => {
     },
 
     staleTime: 60000,
+
     retry: 2,
+
+    refetchOnWindowFocus: false,
 
     onError: (error) => {
       console.error("Error fetching IPs:", error.message);

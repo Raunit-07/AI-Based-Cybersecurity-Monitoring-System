@@ -1,46 +1,120 @@
 import { Server } from "socket.io";
+import jwt from "jsonwebtoken";
+
 import logger from "../utils/logger.js";
 
 let io = null;
 
-// ================= INIT =================
+/**
+ * ================= INIT SOCKET =================
+ */
 const initSocket = (server) => {
   io = new Server(server, {
     cors: {
       origin: process.env.FRONTEND_URL
         ? [process.env.FRONTEND_URL]
         : ["http://localhost:5173", "http://127.0.0.1:5173"],
+
       methods: ["GET", "POST"],
+
       credentials: true,
     },
+
+    transports: ["websocket", "polling"],
   });
 
+  /**
+   * ================= SOCKET AUTH =================
+   */
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+
+      if (!token) {
+        return next(new Error("Unauthorized"));
+      }
+
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_ACCESS_SECRET
+      );
+
+      if (!decoded?.id) {
+        return next(new Error("Invalid token"));
+      }
+
+      socket.userId = decoded.id;
+      socket.userRole = decoded.role;
+
+      next();
+    } catch (error) {
+      logger.error(
+        `❌ Socket auth error: ${error.message}`
+      );
+
+      next(new Error("Socket authentication failed"));
+    }
+  });
+
+  /**
+   * ================= CONNECTION =================
+   */
   io.on("connection", (socket) => {
-    logger.info(`⚡ Client connected: ${socket.id}`);
+    logger.info(
+      `⚡ Client connected: ${socket.id} | User: ${socket.userId}`
+    );
 
-    // Optional room
-    socket.join("global");
+    /**
+     * ================= USER ROOM =================
+     */
+    socket.join(socket.userId);
 
+    logger.info(
+      `✅ User joined private room: ${socket.userId}`
+    );
+
+    /**
+     * ================= PING/PONG =================
+     */
     socket.on("ping", () => {
-      socket.emit("pong", { time: Date.now() });
+      socket.emit("pong", {
+        time: Date.now(),
+      });
     });
 
-    socket.on("disconnect", () => {
-      logger.info(`❌ Client disconnected: ${socket.id}`);
+    /**
+     * ================= DISCONNECT =================
+     */
+    socket.on("disconnect", (reason) => {
+      logger.info(
+        `❌ Client disconnected: ${socket.id} | ${reason}`
+      );
+    });
+
+    /**
+     * ================= SOCKET ERROR =================
+     */
+    socket.on("error", (err) => {
+      logger.error(
+        `❌ Socket error (${socket.id}): ${err.message}`
+      );
     });
   });
 
-  logger.info("✅ Socket.IO initialized");
+  logger.info("✅ Secure Socket.IO initialized");
 
   return io;
 };
 
-// ================= EMIT LOG =================
-const emitLog = (log) => {
-  if (!io) return;
+/**
+ * ================= EMIT LOG =================
+ * Multi-user safe
+ */
+const emitLog = (userId, log) => {
+  if (!io || !userId || !log) return;
 
   try {
-    io.emit("new_log", {
+    io.to(userId).emit("new_log", {
       id: log._id,
       ip: log.ip,
       requests: log.requests,
@@ -51,54 +125,101 @@ const emitLog = (log) => {
       timestamp: log.timestamp,
     });
   } catch (error) {
-    logger.error("❌ emitLog error:", error.message);
+    logger.error(
+      `❌ emitLog error: ${error.message}`
+    );
   }
 };
 
-// ================= EMIT ALERT =================
-const emitAlert = (alert) => {
-  if (!io) {
-    logger.error("❌ Socket.IO not initialized");
+/**
+ * ================= EMIT ALERT =================
+ * Multi-user safe
+ */
+const emitAlert = (userId, alert) => {
+  if (!io || !userId || !alert) {
+    logger.error("❌ Invalid emitAlert payload");
     return;
   }
 
   try {
     const formattedAlert = {
       id: alert._id || null,
+
       ip: alert.ip || "unknown",
-      attackType: alert.attackType || alert.type || "unknown",
+
+      attackType:
+        alert.attackType ||
+        alert.type ||
+        "unknown",
+
       severity: alert.severity || "low",
-      requests: alert.requests || (alert.meta && alert.meta.requests) || 0,
-      failedLogins: alert.failedLogins || (alert.meta && alert.meta.failedLogins) || 0,
-      anomalyScore: alert.anomalyScore || alert.score || 0,
+
+      requests:
+        alert.requests ||
+        alert.meta?.requests ||
+        0,
+
+      failedLogins:
+        alert.failedLogins ||
+        alert.meta?.failedLogins ||
+        0,
+
+      anomalyScore:
+        alert.anomalyScore ||
+        alert.score ||
+        0,
+
       timestamp: alert.timestamp
         ? new Date(alert.timestamp).toISOString()
         : new Date().toISOString(),
+
       status: alert.status || "active",
     };
 
-    io.emit("new_alert", formattedAlert);
+    // ✅ USER-SCOPED EMIT
+    io.to(userId).emit(
+      "new_alert",
+      formattedAlert
+    );
 
-    logger.info("📡 Alert emitted to clients");
+    logger.info(
+      `📡 Alert emitted to user room: ${userId}`
+    );
   } catch (error) {
-    logger.error("❌ emitAlert error:", error.message);
+    logger.error(
+      `❌ emitAlert error: ${error.message}`
+    );
   }
 };
 
-// ================= EMIT TRAFFIC =================
-const emitTraffic = (data) => {
-  if (!io) return;
+/**
+ * ================= EMIT TRAFFIC =================
+ * Multi-user safe
+ */
+const emitTraffic = (userId, data) => {
+  if (!io || !userId || !data) return;
 
   try {
-    io.emit("traffic_update", {
+    io.to(userId).emit("traffic_update", {
       timestamp: Date.now(),
+
       requests: data.requests || 0,
     });
   } catch (error) {
-    logger.error("❌ emitTraffic error:", error.message);
+    logger.error(
+      `❌ emitTraffic error: ${error.message}`
+    );
   }
 };
 
-// ================= EXPORT =================
-export { initSocket, emitAlert, emitLog, emitTraffic };
+/**
+ * ================= EXPORT =================
+ */
+export {
+  initSocket,
+  emitAlert,
+  emitLog,
+  emitTraffic,
+};
+
 export default initSocket;

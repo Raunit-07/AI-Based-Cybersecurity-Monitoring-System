@@ -1,18 +1,23 @@
 import logsService from "../services/logs.service.js";
 
 import catchAsync from "../utils/catchAsync.js";
+
 import apiResponse from "../utils/apiResponse.js";
 
-// ================= CREATE / INGEST LOG =================
+import logger from "../utils/logger.js";
+
+/**
+ * ================= CREATE / INGEST LOG =================
+ * Multi-user SaaS safe
+ */
 const createLog = catchAsync(
   async (req, res) => {
     const logData = req.body;
 
-    // ================= VALIDATION =================
-    if (
-      !logData ||
-      !logData.ip
-    ) {
+    /**
+     * ================= VALIDATION =================
+     */
+    if (!logData || !logData.ip) {
       return apiResponse(
         res,
         400,
@@ -22,8 +27,10 @@ const createLog = catchAsync(
       );
     }
 
-    // ================= AUTHENTICATED SYSTEM USER =================
-    if (!req.systemUser) {
+    /**
+     * ================= AUTHENTICATED SYSTEM USER =================
+     */
+    if (!req.systemUser?._id) {
       return apiResponse(
         res,
         401,
@@ -33,26 +40,44 @@ const createLog = catchAsync(
       );
     }
 
-    // ================= SOCKET.IO =================
+    /**
+     * ================= SOCKET.IO =================
+     */
     const io =
       req.io ||
       req.app.get("io");
 
-    // ================= ATTACH USER =================
+    /**
+     * ================= USER ID =================
+     */
+    const userId =
+      req.systemUser._id;
+
+    /**
+     * ================= ATTACH USER =================
+     */
     const processedLogData = {
       ...logData,
 
-      // ✅ ALERT OWNER
-      user:
-        req.systemUser._id,
+      // ✅ Tenant ownership
+      user: userId,
     };
 
-    // ================= PROCESS LOG =================
+    /**
+     * ================= PROCESS LOG =================
+     * IMPORTANT:
+     * pass userId for tenant isolation
+     */
     const result =
       await logsService.processLog(
         processedLogData,
-        io
+        io,
+        userId
       );
+
+    logger.info(
+      `✅ Log ingested for user: ${userId}`
+    );
 
     return apiResponse(
       res,
@@ -71,27 +96,38 @@ const createLog = catchAsync(
   }
 );
 
-// ================= GET LOGS =================
+/**
+ * ================= GET LOGS =================
+ * User-isolated logs
+ */
 const getLogs = catchAsync(
   async (req, res) => {
+    if (!req.user?._id) {
+      return apiResponse(
+        res,
+        401,
+        false,
+        null,
+        "Unauthorized"
+      );
+    }
+
     let logs = [];
 
     try {
       if (
-        logsService.getLogs
+        typeof logsService.getLogs ===
+        "function"
       ) {
         logs =
-          await logsService.getLogs(
-            {
-              user:
-                req.user?._id,
-            }
-          );
+          await logsService.getLogs({
+            user:
+              req.user._id,
+          });
       }
     } catch (error) {
-      console.error(
-        "❌ Fetch logs error:",
-        error.message
+      logger.error(
+        `❌ Fetch logs error: ${error.message}`
       );
     }
 
@@ -105,7 +141,9 @@ const getLogs = catchAsync(
   }
 );
 
-// ================= EXPORT =================
+/**
+ * ================= EXPORT =================
+ */
 export {
   createLog,
   getLogs,

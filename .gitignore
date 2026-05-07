@@ -29,3 +29,6 @@ npm-debug.log*
 *.pkl
 *.joblib
 *.h5
+
+# Cookies
+cookies.txt

@@ -1,42 +1,80 @@
 import mongoose from "mongoose";
+
 import validator from "validator";
 
+/**
+ * ================= ALERT SCHEMA =================
+ * Enterprise-grade multi-user alert model
+ */
 const alertSchema = new mongoose.Schema(
   {
-    // ================= ALERT OWNER =================
+    /**
+     * ================= ALERT OWNER =================
+     * CRITICAL FOR TENANT ISOLATION
+     */
     user: {
       type: mongoose.Schema.Types.ObjectId,
+
       ref: "User",
-      required: [true, "Alert owner is required"],
+
+      required: [
+        true,
+        "Alert owner is required",
+      ],
+
+      immutable: true,
+
       index: true,
     },
 
-    // ================= SOURCE IP =================
+    /**
+     * ================= SOURCE IP =================
+     */
     ip: {
       type: String,
-      required: [true, "IP address is required"],
+
+      required: [
+        true,
+        "IP address is required",
+      ],
+
       trim: true,
+
       index: true,
 
       validate: {
-        validator: function (value) {
-          return validator.isIP(value);
+        validator(value) {
+          return (
+            typeof value === "string" &&
+            validator.isIP(
+              value.trim()
+            )
+          );
         },
 
-        message: "Invalid IP address format",
+        message:
+          "Invalid IP address format",
       },
     },
 
-    // ================= ML SCORE =================
+    /**
+     * ================= ML SCORE =================
+     */
     anomalyScore: {
       type: Number,
+
       required: true,
+
       min: -1,
+
       max: 1,
+
       default: 0,
     },
 
-    // ================= ATTACK TYPE =================
+    /**
+     * ================= ATTACK TYPE =================
+     */
     attackType: {
       type: String,
 
@@ -52,10 +90,15 @@ const alertSchema = new mongoose.Schema(
       ],
 
       default: "Suspicious",
+
+      trim: true,
+
       index: true,
     },
 
-    // ================= INTERNAL CLASSIFICATION =================
+    /**
+     * ================= INTERNAL TYPE =================
+     */
     type: {
       type: String,
 
@@ -72,10 +115,17 @@ const alertSchema = new mongoose.Schema(
       ],
 
       default: "unknown",
+
+      lowercase: true,
+
+      trim: true,
+
       index: true,
     },
 
-    // ================= SEVERITY =================
+    /**
+     * ================= SEVERITY =================
+     */
     severity: {
       type: String,
 
@@ -87,27 +137,45 @@ const alertSchema = new mongoose.Schema(
       ],
 
       default: "medium",
+
       required: true,
+
+      lowercase: true,
+
+      trim: true,
+
       index: true,
     },
 
-    // ================= HUMAN MESSAGE =================
+    /**
+     * ================= HUMAN MESSAGE =================
+     */
     message: {
       type: String,
+
       trim: true,
+
       maxlength: 500,
+
       default: "Threat detected",
     },
 
-    // ================= RAW LOG =================
+    /**
+     * ================= RAW LOG =================
+     */
     rawLog: {
       type: String,
+
       trim: true,
+
       maxlength: 5000,
+
       default: "",
     },
 
-    // ================= STATUS =================
+    /**
+     * ================= STATUS =================
+     */
     status: {
       type: String,
 
@@ -118,114 +186,169 @@ const alertSchema = new mongoose.Schema(
       ],
 
       default: "active",
+
+      lowercase: true,
+
+      trim: true,
+
       index: true,
     },
 
-    // ================= RESOLVED FLAG =================
+    /**
+     * ================= RESOLVED =================
+     */
     resolved: {
       type: Boolean,
+
       default: false,
+
       index: true,
     },
 
-    // ================= ALERT SOURCE =================
+    /**
+     * ================= ALERT SOURCE =================
+     */
     source: {
       type: String,
+
       default: "nginx",
+
       trim: true,
+
       maxlength: 100,
     },
 
-    // ================= GEOLOCATION =================
+    /**
+     * ================= GEOLOCATION =================
+     */
     geo: {
       country: {
         type: String,
+
         default: "",
+
         trim: true,
       },
 
       city: {
         type: String,
+
         default: "",
+
         trim: true,
       },
     },
 
-    // ================= EXTRA METADATA =================
+    /**
+     * ================= EXTRA METADATA =================
+     */
     meta: {
       requests: {
         type: Number,
+
         min: 0,
+
         default: 0,
       },
 
       failedLogins: {
         type: Number,
+
         min: 0,
+
         default: 0,
       },
 
       blocked: {
         type: Boolean,
+
         default: false,
       },
     },
 
-    // ================= EVENT TIME =================
+    /**
+     * ================= EVENT TIME =================
+     */
     timestamp: {
       type: Date,
+
       default: Date.now,
+
       index: true,
     },
   },
 
   {
     timestamps: true,
+
     versionKey: false,
+
+    strict: true,
   }
 );
 
-// ================= PERFORMANCE INDEXES =================
+/**
+ * ================= PERFORMANCE INDEXES =================
+ */
+
+// Timeline
 alertSchema.index({
   user: 1,
   createdAt: -1,
 });
 
+// IP analytics
 alertSchema.index({
   user: 1,
   ip: 1,
   createdAt: -1,
 });
 
+// Severity analytics
 alertSchema.index({
   user: 1,
   severity: 1,
   createdAt: -1,
 });
 
+// Attack analytics
 alertSchema.index({
   user: 1,
   attackType: 1,
   createdAt: -1,
 });
 
+// Status filtering
 alertSchema.index({
   user: 1,
   status: 1,
   resolved: 1,
 });
 
-// ================= SAFE JSON OUTPUT =================
+// Fast anomaly dashboards
+alertSchema.index({
+  user: 1,
+  resolved: 1,
+  severity: 1,
+  timestamp: -1,
+});
+
+/**
+ * ================= SAFE JSON OUTPUT =================
+ */
 alertSchema.methods.toJSON =
   function () {
-    const obj = this.toObject();
+    const obj =
+      this.toObject();
 
     delete obj.__v;
 
     return obj;
   };
 
-// ================= SAFE MODEL EXPORT =================
+/**
+ * ================= SAFE MODEL EXPORT =================
+ */
 const Alert =
   mongoose.models.Alert ||
   mongoose.model(
