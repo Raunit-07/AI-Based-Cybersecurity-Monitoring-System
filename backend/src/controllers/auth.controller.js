@@ -6,12 +6,18 @@ import apiResponse from "../utils/apiResponse.js";
  * ================= COOKIE CONFIG =================
  */
 const getCookieOptions = () => {
-  const isProduction = process.env.NODE_ENV === "production";
+  const isProduction =
+    process.env.NODE_ENV === "production";
 
   return {
     httpOnly: true,
+
     secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+
+    sameSite: isProduction
+      ? "none"
+      : "lax",
+
     path: "/",
   };
 };
@@ -135,7 +141,7 @@ const refreshToken = catchAsync(async (req, res) => {
  */
 const logout = catchAsync(async (req, res) => {
   if (req.user?._id) {
-    await authService.logoutUser(req.user._id);
+    await authService.logoutUser(req.user.id);
   }
 
   clearTokens(res);
