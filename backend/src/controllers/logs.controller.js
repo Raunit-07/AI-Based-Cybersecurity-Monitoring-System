@@ -102,7 +102,7 @@ const createLog = catchAsync(
  */
 const getLogs = catchAsync(
   async (req, res) => {
-    if (!req.user?._id) {
+    if (!req.user?.id) {
       return apiResponse(
         res,
         401,

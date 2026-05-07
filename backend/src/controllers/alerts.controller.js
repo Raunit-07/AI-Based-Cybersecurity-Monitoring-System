@@ -9,7 +9,7 @@ import apiResponse from "../utils/apiResponse.js";
 const getAlerts = catchAsync(
   async (req, res) => {
     // ================= AUTH CHECK =================
-    if (!req.user?._id) {
+    if (!req.user?.id) {
       return apiResponse(
         res,
         401,
@@ -130,7 +130,7 @@ const getAlerts = catchAsync(
 const getThreatTimeline =
   catchAsync(
     async (req, res) => {
-      if (!req.user?._id) {
+      if (!req.user?.id) {
         return apiResponse(
           res,
           401,
@@ -217,7 +217,7 @@ const getThreatTimeline =
 const resolveAlert =
   catchAsync(
     async (req, res) => {
-      if (!req.user?._id) {
+      if (!req.user?.id) {
         return apiResponse(
           res,
           401,
@@ -293,7 +293,7 @@ const resolveAlert =
 const getSuspiciousIPs =
   catchAsync(
     async (req, res) => {
-      if (!req.user?._id) {
+      if (!req.user?.id) {
         return apiResponse(
           res,
           401,
@@ -482,7 +482,7 @@ const getSuspiciousIPs =
 const getAlertStats =
   catchAsync(
     async (req, res) => {
-      if (!req.user?._id) {
+      if (!req.user?.id) {
         return apiResponse(
           res,
           401,
