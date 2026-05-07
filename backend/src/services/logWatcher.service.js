@@ -3,7 +3,8 @@ import chokidar from "chokidar";
 import axios from "axios";
 import path from "path";
 
-import { createAlert } from "./alerts.service.js";
+// ⚠️ TEMPORARILY DISABLED
+// import { createAlert } from "./alerts.service.js";
 
 let lastSize = 0;
 
@@ -11,6 +12,22 @@ let lastSize = 0;
  * =====================================
  * START LOG WATCHER
  * =====================================
+ *
+ * ⚠️ IMPORTANT
+ * Legacy/demo watcher.
+ *
+ * Current production system uses:
+ * - API ingestion
+ * - authenticated alert pipeline
+ * - tenant-aware alert ownership
+ *
+ * This watcher is kept ONLY for:
+ * - future ingestion pipeline upgrades
+ * - local testing
+ * - debugging
+ *
+ * Global alert creation + io.emit
+ * intentionally disabled for SaaS safety.
  */
 export const startLogWatcher = (io) => {
     const logPath = path.resolve(
@@ -24,8 +41,8 @@ export const startLogWatcher = (io) => {
 
     // ================= FILE EXISTS CHECK =================
     if (!fs.existsSync(logPath)) {
-        console.error(
-            "❌ Log file does not exist:",
+        console.warn(
+            "⚠️ Log file not found:",
             logPath
         );
 
@@ -42,12 +59,13 @@ export const startLogWatcher = (io) => {
 
             ignoreInitial: false,
         })
+
         .on("change", async () => {
             try {
                 const stats =
                     fs.statSync(logPath);
 
-                // ================= FILE TRUNCATION SAFETY =================
+                // ================= FILE RESET SAFETY =================
                 if (
                     stats.size < lastSize
                 ) {
@@ -93,7 +111,12 @@ export const startLogWatcher = (io) => {
 
                         for (const line of lines) {
                             try {
-                                // ================= SEND TO ML =================
+                                /**
+                                 * ================= ML ANALYSIS =================
+                                 *
+                                 * ML service still active.
+                                 * Useful for future ingestion.
+                                 */
                                 const response =
                                     await axios.post(
                                         "http://localhost:8000/predict",
@@ -112,80 +135,68 @@ export const startLogWatcher = (io) => {
                                     extractIP(line);
 
                                 /**
-                                 * ⚠️ IMPORTANT
-                                 * Global watcher currently has
-                                 * no user ownership.
+                                 * =====================================
+                                 * TEMPORARILY DISABLED
+                                 * =====================================
                                  *
-                                 * Temporary fallback:
-                                 * user = null
-                                 *
-                                 * Future:
-                                 * attach user from ingestion pipeline
+                                 * Reason:
+                                 * - no authenticated user ownership
+                                 * - unsafe global emissions
+                                 * - breaks tenant isolation
+                                 * - causes SaaS leakage
                                  */
-                                const alert =
-                                    await createAlert(
-                                        {
-                                            user: null,
 
-                                            ip,
+                                /*
+                                await createAlert(
+                                  {
+                                    user: null,
+                                    ip,
+                                    rawLog: line,
+                                    attackType:
+                                      result.attackType ||
+                                      "Unknown",
+                                    anomalyScore:
+                                      result.anomaly_score || 0,
+                                    severity:
+                                      result.is_anomaly
+                                        ? "high"
+                                        : "low",
+                                    timestamp:
+                                      new Date(),
+                                  },
+                                  io
+                                );
+                                */
 
-                                            rawLog:
-                                                line,
-
-                                            attackType:
-                                                result.attackType ||
-                                                "Unknown",
-
-                                            anomalyScore:
-                                                result.anomaly_score ||
-                                                0,
-
-                                            severity:
-                                                result.is_anomaly
-                                                    ? "high"
-                                                    : "low",
-
-                                            timestamp:
-                                                new Date(),
-                                        },
-                                        io
-                                    );
-
-                                // ================= SAFE SOCKET EMIT =================
-                                /**
-                                 * ONLY emit globally
-                                 * if alert has no user.
-                                 *
-                                 * Future SaaS:
-                                 * io.to(userId).emit(...)
-                                 */
-                                if (!alert?.user) {
-                                    io.emit(
-                                        "traffic_update",
-                                        {
-                                            requests: 1,
-
-                                            blocked:
-                                                result.is_anomaly
-                                                    ? 1
-                                                    : 0,
-
-                                            timestamp:
-                                                new Date(),
-
-                                            ip,
-
-                                            attackType:
-                                                result.attackType ||
-                                                "Unknown",
-
-                                            user: null,
-                                        }
-                                    );
-                                }
+                                /*
+                                io.emit(
+                                  "traffic_update",
+                                  {
+                                    requests: 1,
+                                    blocked:
+                                      result.is_anomaly
+                                        ? 1
+                                        : 0,
+                                    timestamp:
+                                      new Date(),
+                                    ip,
+                                    attackType:
+                                      result.attackType ||
+                                      "Unknown",
+                                    user: null,
+                                  }
+                                );
+                                */
 
                                 console.log(
-                                    "🚨 Alert processed"
+                                    "🧠 Log analyzed safely:",
+                                    {
+                                        ip,
+                                        attackType:
+                                            result.attackType,
+                                        anomaly:
+                                            result.is_anomaly,
+                                    }
                                 );
                             } catch (error) {
                                 console.error(
@@ -215,7 +226,7 @@ export const startLogWatcher = (io) => {
         });
 
     console.log(
-        "✅ Log watcher initialized"
+        "✅ Log watcher initialized (safe mode)"
     );
 };
 

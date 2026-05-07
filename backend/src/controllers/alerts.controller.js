@@ -310,13 +310,17 @@ const getSuspiciousIPs =
         50
       );
 
+      const userObjectId =
+        new mongoose.Types.ObjectId(
+          req.user._id
+        );
+
       const suspiciousIPs =
         await Alert.aggregate([
           // ================= USER FILTER =================
           {
             $match: {
-              user:
-                req.user._id,
+              user: userObjectId,
 
               ip: {
                 $ne: null,
@@ -340,7 +344,7 @@ const getSuspiciousIPs =
 
               maxAnomalyScore:
               {
-                $min:
+                $max:
                   "$anomalyScore",
               },
 

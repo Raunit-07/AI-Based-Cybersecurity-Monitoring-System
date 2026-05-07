@@ -1,14 +1,81 @@
 import mongoose from "mongoose";
 
+/**
+ * =====================================
+ * CONNECT DATABASE
+ * =====================================
+ */
 const connectDB = async () => {
   try {
-    console.log("🔗 MONGO_URI =", process.env.MONGO_URI);
+    /**
+     * ================= VALIDATE ENV =================
+     */
+    if (!process.env.MONGO_URI) {
+      throw new Error(
+        "MONGO_URI is not defined"
+      );
+    }
 
-    await mongoose.connect(process.env.MONGO_URI);
+    /**
+     * ================= CONNECT =================
+     */
+    await mongoose.connect(
+      process.env.MONGO_URI,
+      {
+        autoIndex: false,
 
-    console.log("MongoDB Connected ✅");
+        serverSelectionTimeoutMS: 5000,
+
+        socketTimeoutMS: 45000,
+      }
+    );
+
+    /**
+     * ================= SUCCESS LOG =================
+     */
+    console.log(
+      "✅ MongoDB Connected"
+    );
+
+    /**
+     * ================= CONNECTION EVENTS =================
+     */
+    mongoose.connection.on(
+      "error",
+      (err) => {
+        console.error(
+          "❌ MongoDB Runtime Error:",
+          err.message
+        );
+      }
+    );
+
+    mongoose.connection.on(
+      "disconnected",
+      () => {
+        console.warn(
+          "⚠️ MongoDB Disconnected"
+        );
+      }
+    );
+
+    mongoose.connection.on(
+      "reconnected",
+      () => {
+        console.log(
+          "🔄 MongoDB Reconnected"
+        );
+      }
+    );
   } catch (error) {
-    console.error("❌ MongoDB Error:", error.message);
+    /**
+     * ================= SAFE ERROR LOG =================
+     */
+    console.error(
+      "❌ MongoDB Connection Failed:",
+      error.message
+    );
+
     process.exit(1);
   }
 };

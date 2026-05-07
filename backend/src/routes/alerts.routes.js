@@ -9,13 +9,17 @@ import {
 const router = express.Router();
 
 /**
- * ================= GLOBAL AUTH PROTECTION =================
+ * =====================================
+ * GLOBAL AUTH PROTECTION
+ * =====================================
  * ALL alert routes require authentication
  */
 router.use(authMiddleware);
 
 /**
- * ================= ALERT ROUTES =================
+ * =====================================
+ * ALERT ROUTES
+ * =====================================
  */
 
 /**
@@ -27,6 +31,15 @@ router.use(authMiddleware);
 router.get(
     "/",
     alertsController.getAlerts
+);
+
+/**
+ * ================= ALERT STATS =================
+ * Dashboard analytics
+ */
+router.get(
+    "/stats",
+    alertsController.getAlertStats
 );
 
 /**

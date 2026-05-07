@@ -29,6 +29,36 @@ const API = axios.create({
 });
 
 /**
+ * =====================================
+ * REFRESH TOKEN STATE
+ * =====================================
+ */
+let isRefreshing = false;
+
+let failedQueue = [];
+
+/**
+ * =====================================
+ * PROCESS FAILED QUEUE
+ * =====================================
+ */
+const processQueue = (
+  error = null
+) => {
+  failedQueue.forEach(
+    (promise) => {
+      if (error) {
+        promise.reject(error);
+      } else {
+        promise.resolve();
+      }
+    }
+  );
+
+  failedQueue = [];
+};
+
+/**
  * ================================
  * REQUEST INTERCEPTOR
  * ================================
@@ -37,7 +67,9 @@ API.interceptors.request.use(
   (config) => {
     return config;
   },
-  (error) => Promise.reject(error)
+
+  (error) =>
+    Promise.reject(error)
 );
 
 /**
@@ -48,25 +80,172 @@ API.interceptors.request.use(
 API.interceptors.response.use(
   (response) => response.data,
 
-  (error) => {
-    // Network / backend unavailable
+  async (error) => {
+    const originalRequest =
+      error.config;
+
+    /**
+     * ============================
+     * NETWORK ERROR
+     * ============================
+     */
     if (!error.response) {
       return Promise.reject({
         success: false,
+
         status: 0,
+
         message:
           "Network error. Please check your connection or backend server.",
+
         errors: [],
+
         raw: null,
       });
     }
 
-    const status = error.response.status;
+    /**
+     * ============================
+     * TOKEN EXPIRED
+     * ============================
+     */
+    if (
+      error.response.status ===
+      401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes(
+        "/auth/login"
+      ) &&
+      !originalRequest.url?.includes(
+        "/auth/register"
+      ) &&
+      !originalRequest.url?.includes(
+        "/auth/refresh-token"
+      )
+    ) {
+      originalRequest._retry = true;
 
-    const data = error.response.data || {};
+      /**
+       * ============================
+       * QUEUE REQUESTS
+       * ============================
+       */
+      if (isRefreshing) {
+        return new Promise(
+          (
+            resolve,
+            reject
+          ) => {
+            failedQueue.push({
+              resolve,
+              reject,
+            });
+          }
+        )
+          .then(() =>
+            API(
+              originalRequest
+            )
+          )
+          .catch((err) =>
+            Promise.reject(err)
+          );
+      }
+
+      isRefreshing = true;
+
+      try {
+        /**
+         * ============================
+         * REFRESH ACCESS TOKEN
+         * ============================
+         */
+        await axios.post(
+          `${BASE_URL}/auth/refresh-token`,
+          {},
+          {
+            withCredentials: true,
+          }
+        );
+
+        /**
+         * ============================
+         * SUCCESS
+         * ============================
+         */
+        processQueue();
+
+        isRefreshing = false;
+
+        /**
+         * Retry original request
+         */
+        return API(
+          originalRequest
+        );
+      } catch (
+      refreshError
+      ) {
+        /**
+         * ============================
+         * REFRESH FAILED
+         * ============================
+         */
+        processQueue(
+          refreshError
+        );
+
+        isRefreshing = false;
+
+        /**
+         * Clear frontend session
+         */
+        localStorage.removeItem(
+          "threatops_user"
+        );
+
+        /**
+         * Redirect to login
+         */
+        if (
+          window.location.pathname !==
+          "/login"
+        ) {
+          window.location.href =
+            "/login";
+        }
+
+        return Promise.reject({
+          success: false,
+
+          status: 401,
+
+          message:
+            "Session expired. Please login again.",
+
+          errors: [],
+
+          raw:
+            refreshError?.response
+              ?.data || null,
+        });
+      }
+    }
+
+    /**
+     * ============================
+     * NORMAL ERROR
+     * ============================
+     */
+    const status =
+      error.response.status;
+
+    const data =
+      error.response.data || {};
 
     return Promise.reject({
       success: false,
+
       status,
 
       message:
@@ -74,7 +253,9 @@ API.interceptors.response.use(
         data.error ||
         "Something went wrong",
 
-      errors: Array.isArray(data.errors)
+      errors: Array.isArray(
+        data.errors
+      )
         ? data.errors
         : [],
 
@@ -92,7 +273,9 @@ API.interceptors.response.use(
 /**
  * Register User
  */
-export const register = async (data) => {
+export const register = async (
+  data
+) => {
   return await API.post(
     "/auth/register",
     data
@@ -102,7 +285,9 @@ export const register = async (data) => {
 /**
  * Login User
  */
-export const login = async (data) => {
+export const login = async (
+  data
+) => {
   return await API.post(
     "/auth/login",
     data
@@ -136,58 +321,50 @@ export const getMe = async () => {
 /**
  * Fetch Alerts
  */
-export const fetchAlerts = async (
-  params = {}
-) => {
-  const res = await API.get(
-    "/alerts",
-    { params }
-  );
+export const fetchAlerts =
+  async (params = {}) => {
+    const res =
+      await API.get(
+        "/alerts",
+        { params }
+      );
 
-  /**
-   * After interceptor:
-   * res = {
-   *   success,
-   *   data,
-   *   message
-   * }
-   */
+    if (
+      Array.isArray(
+        res?.data?.alerts
+      )
+    ) {
+      return res.data.alerts;
+    }
 
-  if (
-    Array.isArray(res?.data?.alerts)
-  ) {
-    return res.data.alerts;
-  }
+    if (
+      Array.isArray(res?.data)
+    ) {
+      return res.data;
+    }
 
-  if (
-    Array.isArray(res?.data)
-  ) {
-    return res.data;
-  }
+    if (Array.isArray(res)) {
+      return res;
+    }
 
-  if (Array.isArray(res)) {
-    return res;
-  }
-
-  return [];
-};
+    return [];
+  };
 
 /**
  * Resolve Alert
  */
-export const resolveAlert = async (
-  id
-) => {
-  if (!id) {
-    throw new Error(
-      "Alert ID required"
-    );
-  }
+export const resolveAlert =
+  async (id) => {
+    if (!id) {
+      throw new Error(
+        "Alert ID required"
+      );
+    }
 
-  return await API.patch(
-    `/alerts/${id}/resolve`
-  );
-};
+    return await API.patch(
+      `/alerts/${id}/resolve`
+    );
+  };
 
 /**
  * ================================
@@ -200,25 +377,18 @@ export const resolveAlert = async (
  */
 export const fetchSuspiciousIPs =
   async (limit = 20) => {
-    const res = await API.get(
-      "/alerts/suspicious-ips",
-      {
-        params: { limit },
-      }
-    );
-
-    /**
-     * Expected:
-     * {
-     *   success: true,
-     *   data: {
-     *     ips: [...]
-     *   }
-     * }
-     */
+    const res =
+      await API.get(
+        "/alerts/suspicious-ips",
+        {
+          params: { limit },
+        }
+      );
 
     if (
-      Array.isArray(res?.data?.ips)
+      Array.isArray(
+        res?.data?.ips
+      )
     ) {
       return res.data.ips;
     }
@@ -231,9 +401,10 @@ export const fetchSuspiciousIPs =
  */
 export const fetchAlertStats =
   async () => {
-    const res = await API.get(
-      "/alerts/stats"
-    );
+    const res =
+      await API.get(
+        "/alerts/stats"
+      );
 
     return res?.data || {};
   };
@@ -247,20 +418,19 @@ export const fetchAlertStats =
 /**
  * Send Log Data
  */
-export const sendLog = async (
-  logData
-) => {
-  if (!logData?.ip) {
-    throw new Error(
-      "Invalid log data: IP required"
-    );
-  }
+export const sendLog =
+  async (logData) => {
+    if (!logData?.ip) {
+      throw new Error(
+        "Invalid log data: IP required"
+      );
+    }
 
-  return await API.post(
-    "/logs",
-    logData
-  );
-};
+    return await API.post(
+      "/logs",
+      logData
+    );
+  };
 
 /**
  * ================================

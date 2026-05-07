@@ -134,7 +134,7 @@ const refreshToken = catchAsync(async (req, res) => {
  * ================= LOGOUT =================
  */
 const logout = catchAsync(async (req, res) => {
-  if (req.user?.id) {
+  if (req.user?._id) {
     await authService.logoutUser(req.user._id);
   }
 

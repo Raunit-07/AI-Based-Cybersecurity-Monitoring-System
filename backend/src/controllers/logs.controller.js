@@ -115,20 +115,47 @@ const getLogs = catchAsync(
     let logs = [];
 
     try {
+      /**
+       * ================= FETCH LOGS =================
+       */
       if (
         typeof logsService.getLogs ===
         "function"
       ) {
         logs =
-          await logsService.getLogs({
-            user:
-              req.user._id,
-          });
+          await logsService.getLogs(
+            req.user._id,
+            req.query
+          );
+      } else {
+        logger.warn(
+          "⚠️ logsService.getLogs is not defined"
+        );
+
+        logs = {
+          logs: [],
+          pagination: {
+            total: 0,
+            page: 1,
+            limit: 0,
+            pages: 0,
+          },
+        };
       }
     } catch (error) {
       logger.error(
         `❌ Fetch logs error: ${error.message}`
       );
+
+      logs = {
+        logs: [],
+        pagination: {
+          total: 0,
+          page: 1,
+          limit: 0,
+          pages: 0,
+        },
+      };
     }
 
     return apiResponse(
