@@ -140,13 +140,13 @@ const refreshToken = catchAsync(async (req, res) => {
  * ================= LOGOUT =================
  */
 const logout = catchAsync(async (req, res) => {
-  if (req.user?.id)) {
+  if (req.user?.id) {
     await authService.logoutUser(req.user.id);
   }
 
-clearTokens(res);
+  clearTokens(res);
 
-return apiResponse(res, 200, true, {}, "Logged out successfully");
+  return apiResponse(res, 200, true, {}, "Logged out successfully");
 });
 
 /**
