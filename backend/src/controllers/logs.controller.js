@@ -124,7 +124,7 @@ const getLogs = catchAsync(
       ) {
         logs =
           await logsService.getLogs(
-            req.user.id,
+            req.user._id,
             req.query
           );
       } else {

@@ -19,7 +19,7 @@ export const Dashboard = () => {
   const { trafficData, isConnected } = useLiveTraffic();
 
   // ================= ALERTS VIA REACT QUERY =================
-  // Same cache key ["alerts", user.id] that useLiveTraffic writes socket alerts into
+  // Same cache key ["alerts", user._id] that useLiveTraffic writes socket alerts into
   const { data: alerts = [], isLoading: loadingAlerts } = useQuery({
     queryKey: ["alerts", user?.id],
     queryFn: fetchAlerts,

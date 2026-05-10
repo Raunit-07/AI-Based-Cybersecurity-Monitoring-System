@@ -153,7 +153,7 @@ io.on("connection", (socket) => {
    * ================= USER ROOM =================
    */
   socket.join(
-    socket.userId
+    socket.userId.toString()
   );
 
   logger.info(

@@ -41,7 +41,7 @@ const getAlerts = catchAsync(
 
     // ================= USER FILTER =================
     const query = {
-      user: req.user.id,
+      user: req.user._id,
     };
 
     if (ip) query.ip = ip;
@@ -152,7 +152,7 @@ const getThreatTimeline =
 
       const timeline =
         await Alert.find({
-          user: req.user.id,
+          user: req.user._id,
         })
           .sort({
             createdAt: -1,
@@ -251,7 +251,7 @@ const resolveAlert =
             _id: id,
 
             user:
-              req.user.id,
+              req.user._id,
           },
           {
             resolved: true,
@@ -312,7 +312,7 @@ const getSuspiciousIPs =
 
       const userObjectId =
         new mongoose.Types.ObjectId(
-          req.user.id
+          req.user._id
         );
 
       const suspiciousIPs =
@@ -493,7 +493,7 @@ const getAlertStats =
       }
 
       const userFilter = {
-        user: req.user.id,
+        user: req.user._id,
       };
 
       const [
