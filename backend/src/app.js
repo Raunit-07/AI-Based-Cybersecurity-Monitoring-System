@@ -95,7 +95,7 @@ app.get("/health", (req, res) => {
 
 // ✅ APPLY CORS
 app.use(cors(corsOptions));
-
+// added
 // ✅ EXPRESS V5 PREFLIGHT FIX
 app.options(/.*/, cors(corsOptions));
 
