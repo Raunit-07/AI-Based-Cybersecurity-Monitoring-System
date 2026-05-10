@@ -15,7 +15,7 @@ import logger from "./utils/logger.js";
 import { Server } from "socket.io";
 
 import { verifyEmailService } from "./integrations/email.js";
-import { startLogWatcher } from "./services/logWatcher.service.js";
+// import { startLogWatcher } from "./services/logWatcher.service.js";
 
 const PORT = process.env.PORT || 5000;
 
@@ -259,9 +259,9 @@ const startServer =
             /**
              * ================= LOG WATCHER =================
              */
-            startLogWatcher(
-              io
-            );
+            // startLogWatcher(
+            //   io
+            // );
 
             logger.info(
               "Real log watcher started"
