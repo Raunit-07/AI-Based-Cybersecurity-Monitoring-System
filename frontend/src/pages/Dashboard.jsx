@@ -1,43 +1,31 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { TrafficChart } from "../components/TrafficChart";
 import { AlertsList } from "../components/AlertsList";
 import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
 
-
-import { fetchAlerts } from "../services/api"; // ✅ NEW
+import { fetchAlerts } from "../services/api";
 import { useSuspiciousIPs } from "../hooks/useThreatData";
 import { useLiveTraffic } from "../hooks/useLiveTraffic";
 import ThreatTimeline from "../components/ThreatTimeline";
 import SuspiciousIPs from "../components/SuspiciousIPs";
+import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "../hooks/useAuth";
 
 import { Shield, AlertTriangle, Activity, Database } from "lucide-react";
 
 // ================= MAIN COMPONENT =================
 export const Dashboard = () => {
-  const [alerts, setAlerts] = useState([]);
+  const { user } = useAuth();
   const { trafficData, isConnected } = useLiveTraffic();
-  const [loadingAlerts, setLoadingAlerts] = useState(true);
 
-  // ================= LOAD ALERTS FROM BACKEND =================
-  useEffect(() => {
-    const loadAlerts = async () => {
-      try {
-        const data = await fetchAlerts();
-
-        if (Array.isArray(data)) {
-          setAlerts(data);
-        }
-      } catch (err) {
-        console.error("Failed to load alerts:", err);
-      } finally {
-        setLoadingAlerts(false);
-      }
-    };
-
-    loadAlerts();
-  }, []);
-
-
+  // ================= ALERTS VIA REACT QUERY =================
+  // Same cache key ["alerts", user.id] that useLiveTraffic writes socket alerts into
+  const { data: alerts = [], isLoading: loadingAlerts } = useQuery({
+    queryKey: ["alerts", user?.id],
+    queryFn: fetchAlerts,
+    enabled: !!user?.id,
+    staleTime: 30 * 1000,
+  });
 
   // ================= SUSPICIOUS IPS =================
   const { data: ips = [], isLoading: isLoadingIPs } = useSuspiciousIPs();
