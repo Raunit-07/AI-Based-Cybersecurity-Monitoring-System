@@ -255,6 +255,21 @@ const processLog = async (
         attackType,
       });
 
+
+    /**
+* ================= LIVE TRAFFIC =================
+* Emit ALL traffic activity
+*/
+    emitTrafficUpdate(io, userId, {
+      requests: cleanData.requests,
+
+      isAnomaly,
+
+      ip: cleanData.ip,
+
+      attackType,
+    });
+
     /**
      * ================= CREATE ALERT =================
      *

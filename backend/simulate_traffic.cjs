@@ -1,75 +1,185 @@
-// import dotenv from "dotenv";
-// dotenv.config();
+require("dotenv").config();
 
 const axios = require("axios");
 
-const API_URL = "https://threatops-backend.onrender.com/api/logs"; // Docker internal URL
+// ============================================
+// CONFIG
+// ============================================
 
-const endpoints = ["/login", "/users", "/products", "/checkout"];
-const methods = ["GET", "POST"];
-const ips = ["192.168.1.10", "10.0.0.5", "45.33.22.11"];
+const API_URL =
+  process.env.LOG_API_URL ||
+  "http://localhost:5000/api/logs";
 
-function generatePayload(isAnomaly = false) {
-  const ip = isAnomaly
-    ? "45.33.22.11" // suspicious IP
-    : ips[Math.floor(Math.random() * ips.length)];
+const API_KEY = process.env.LOG_API_KEY;
 
+const INTERVAL =
+  parseInt(process.env.SIMULATION_INTERVAL) || 3000;
+
+// ============================================
+// TRAFFIC DATA
+// ============================================
+
+const endpoints = [
+  "/api/login",
+  "/api/users",
+  "/api/admin",
+  "/api/data",
+  "/api/settings",
+  "/api/auth/me",
+];
+
+const methods = ["GET", "POST", "PUT", "DELETE"];
+
+const normalIPs = [
+  "192.168.1.10",
+  "192.168.1.20",
+  "192.168.1.30",
+  "172.16.0.15",
+];
+
+const attackIPs = [
+  "45.33.22.11",
+  "66.77.88.99",
+  "91.45.123.10",
+];
+
+// ============================================
+// NORMAL TRAFFIC
+// ============================================
+
+function generateNormalTraffic() {
   return {
-    ip,
+    ip:
+      normalIPs[
+      Math.floor(Math.random() * normalIPs.length)
+      ],
 
-    // 🔥 CRITICAL: HIGH TRAFFIC FOR DDoS
-    requests: isAnomaly
-      ? Math.floor(Math.random() * 1500) + 500 // spike
-      : Math.floor(Math.random() * 50) + 1,
+    requests:
+      Math.floor(Math.random() * 80) + 10,
 
-    // 🔥 CRITICAL: FAILED LOGINS FOR BRUTE FORCE
-    failedLogins: isAnomaly
-      ? Math.floor(Math.random() * 30) + 10
-      : Math.random() > 0.8 ? 2 : 0,
+    failedLogins:
+      Math.random() < 0.1 ? 1 : 0,
 
-    endpoint: endpoints[Math.floor(Math.random() * endpoints.length)],
-    method: methods[Math.floor(Math.random() * methods.length)],
+    endpoint:
+      endpoints[
+      Math.floor(Math.random() * endpoints.length)
+      ],
+
+    method:
+      methods[
+      Math.floor(Math.random() * methods.length)
+      ],
 
     timestamp: new Date().toISOString(),
-    user_agent: "Mozilla/5.0",
 
-    // optional metadata
-    status: isAnomaly ? 401 : 200,
+    user_agent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+
+    status: 200,
   };
 }
 
-async function sendLog(isAnomaly = false) {
-  const payload = generatePayload(isAnomaly);
+// ============================================
+// ATTACK TRAFFIC
+// ============================================
+
+function generateAttackTraffic() {
+  const isBruteForce = Math.random() < 0.5;
+
+  return {
+    ip:
+      attackIPs[
+      Math.floor(Math.random() * attackIPs.length)
+      ],
+
+    requests: isBruteForce
+      ? Math.floor(Math.random() * 300) + 100
+      : Math.floor(Math.random() * 2000) + 1200,
+
+    failedLogins: isBruteForce
+      ? Math.floor(Math.random() * 50) + 20
+      : Math.floor(Math.random() * 5),
+
+    endpoint: isBruteForce
+      ? "/api/login"
+      : "/api/data",
+
+    method: "POST",
+
+    timestamp: new Date().toISOString(),
+
+    user_agent: isBruteForce
+      ? "BruteForceBot/2.0"
+      : "DDoSBot/5.0",
+
+    status: isBruteForce ? 401 : 429,
+  };
+}
+
+// ============================================
+// SEND LOG
+// ============================================
+
+async function sendLog(isAttack = false) {
+  const payload = isAttack
+    ? generateAttackTraffic()
+    : generateNormalTraffic();
 
   try {
-    const res = await axios.post(API_URL, payload, {
-      headers: {
-        "x-api-key": process.env.LOG_API_KEY || "raunit_super_secure_key_123",
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await axios.post(
+      API_URL,
+      payload,
+      {
+        headers: {
+          "x-api-key": API_KEY,
+          "Content-Type": "application/json",
+        },
+
+        timeout: 20000,
+      }
+    );
 
     console.log(
-      `📡 ${isAnomaly ? "ATTACK" : "NORMAL"} →`,
-      payload.ip,
-      "| req:",
-      payload.requests,
-      "| fails:",
-      payload.failedLogins
+      `📡 ${isAttack ? "ATTACK" : "NORMAL"
+      } | IP: ${payload.ip} | req: ${payload.requests
+      } | failed: ${payload.failedLogins
+      } | status: ${response.status}`
     );
   } catch (err) {
-    const errorMsg = err.response?.data?.message || err.response?.data || err.message;
-    console.error("❌ Error:", errorMsg);
+    console.error(
+      "❌ Traffic simulation error:",
+      err.response?.data?.message ||
+      err.message
+    );
   }
 }
 
-function run() {
-  console.log("🚀 Traffic Simulation Started...");
+// ============================================
+// MAIN LOOP
+// ============================================
 
-  setInterval(() => {
-    const isAnomaly = Math.random() < 0.35; // 🔥 increased attack probability
-    sendLog(isAnomaly);
-  }, 1500); // faster flow
+function startSimulation() {
+  console.log(
+    "🚀 Production Traffic Simulator Started"
+  );
+
+  const interval = setInterval(() => {
+    // 20% attacks
+    const isAttack = Math.random() < 0.2;
+
+    sendLog(isAttack);
+  }, INTERVAL);
+
+  // graceful shutdown
+  process.on("SIGINT", () => {
+    clearInterval(interval);
+
+    console.log(
+      "\n🛑 Traffic Simulator Stopped"
+    );
+
+    process.exit(0);
+  });
 }
 
-run();
+startSimulation();

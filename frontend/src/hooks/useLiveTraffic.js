@@ -14,6 +14,11 @@ import { useAuth } from "./useAuth";
  * =====================================
  * LIVE TRAFFIC HOOK
  * =====================================
+ * Handles:
+ * - realtime traffic updates
+ * - realtime alerts
+ * - socket lifecycle
+ * - cache synchronization
  */
 export const useLiveTraffic = () => {
   const [trafficData, setTrafficData] =
@@ -27,18 +32,21 @@ export const useLiveTraffic = () => {
 
   const socketRef = useRef(null);
 
-  // ✅ Current logged-in user
   const { user } = useAuth();
 
   useEffect(() => {
-    // ✅ Prevent socket init before auth
+    /**
+     * =====================================
+     * AUTH GUARD
+     * =====================================
+     */
     if (!user?.id) return;
 
     const socket = getSocket();
 
     if (!socket) {
       console.error(
-        "❌ Socket instance not available"
+        "❌ Socket instance unavailable"
       );
 
       return;
@@ -46,7 +54,11 @@ export const useLiveTraffic = () => {
 
     socketRef.current = socket;
 
-    // ================= CONNECT =================
+    /**
+     * =====================================
+     * SOCKET CONNECT
+     * =====================================
+     */
     const handleConnect = () => {
       setIsConnected(true);
 
@@ -56,7 +68,11 @@ export const useLiveTraffic = () => {
       );
     };
 
-    // ================= DISCONNECT =================
+    /**
+     * =====================================
+     * SOCKET DISCONNECT
+     * =====================================
+     */
     const handleDisconnect = (
       reason
     ) => {
@@ -68,161 +84,179 @@ export const useLiveTraffic = () => {
       );
     };
 
-    // ================= TRAFFIC =================
+    /**
+     * =====================================
+     * TRAFFIC UPDATE
+     * =====================================
+     */
     const handleTrafficUpdate = (
       data
     ) => {
-      console.log(
-        "📊 RECEIVED TRAFFIC:",
-        data
-      );
+      try {
+        if (
+          !data ||
+          typeof data !== "object"
+        ) {
+          return;
+        }
 
-      // 🔒 VALIDATION
-      if (
-        !data ||
-        typeof data !== "object"
-      ) {
-        console.warn(
-          "⚠️ Invalid traffic payload:",
-          data
-        );
+        // =====================================
+        // MULTI-TENANT SAFETY
+        // =====================================
+        if (
+          data.user &&
+          data.user !== user.id
+        ) {
+          return;
+        }
 
-        return;
-      }
+        const trafficPoint = {
+          time:
+            data.time ||
+            new Date().toISOString(),
 
-      // ✅ Multi-user protection
-      if (
-        data.user &&
-        data.user !== user.id
-      ) {
-        return;
-      }
+          requests: Math.max(
+            0,
+            Number(data.requests) || 0
+          ),
 
-      const safeRequests =
-        Math.max(
-          0,
-          Number(data.requests) || 0
-        );
+          blocked: Math.max(
+            0,
+            Number(data.blocked) || 0
+          ),
 
-      const safeBlocked =
-        Math.max(
-          0,
-          Number(data.blocked) || 0
-        );
+          ip:
+            data.ip || "unknown",
 
-      const trafficPoint = {
-        time:
-          data.timestamp ||
-          Date.now(),
+          attackType:
+            data.attackType ||
+            "Normal",
+        };
 
-        requests:
-          safeRequests,
-
-        blocked:
-          safeBlocked,
-
-        ip: data.ip || "",
-
-        attackType:
-          data.attackType ||
-          "Unknown",
-      };
-
-      setTrafficData((prev) => {
-        return [
-          ...prev.slice(-19),
-          trafficPoint,
-        ];
-      });
-
-      // ✅ User-scoped cache
-      queryClient.setQueryData(
-        ["traffic", user.id],
-        (oldData = []) => {
+        // =====================================
+        // LOCAL STATE
+        // =====================================
+        setTrafficData((prev) => {
           return [
-            ...oldData.slice(-19),
+            ...prev.slice(-19),
             trafficPoint,
           ];
-        }
-      );
+        });
+
+        // =====================================
+        // CACHE UPDATE
+        // =====================================
+        queryClient.setQueryData(
+          ["traffic", user.id],
+          (oldData = []) => {
+            return [
+              ...oldData.slice(-19),
+              trafficPoint,
+            ];
+          }
+        );
+      } catch (error) {
+        console.error(
+          "❌ Traffic handler error:",
+          error.message
+        );
+      }
     };
 
-    // ================= ALERTS =================
+    /**
+     * =====================================
+     * NEW ALERT
+     * =====================================
+     */
     const handleNewAlert = (
       alert
     ) => {
-      console.log(
-        "🚨 RECEIVED ALERT:",
-        alert
-      );
-
-      // 🔒 VALIDATION
-      if (
-        !alert ||
-        typeof alert !==
-        "object"
-      ) {
-        console.warn(
-          "⚠️ Invalid alert:",
-          alert
-        );
-
-        return;
-      }
-
-      // ✅ Multi-user isolation
-      if (
-        alert.user &&
-        alert.user !== user.id
-      ) {
-        return;
-      }
-
-      const formattedAlert = {
-        id:
-          alert.id ||
-          crypto.randomUUID(),
-
-        type:
-          alert.attackType ||
-          alert.type ||
-          "Unknown Threat",
-
-        severity:
-          alert.severity ||
-          "medium",
-
-        source:
-          alert.ip ||
-          "Unknown",
-
-        time:
-          alert.timestamp ||
-          new Date(),
-
-        status: "active",
-      };
-
-      // ✅ USER-SCOPED CACHE
-      queryClient.setQueryData(
-        ["alerts", user.id],
-        (oldData) => {
-          const safeOld =
-            Array.isArray(
-              oldData
-            )
-              ? oldData
-              : [];
-
-          return [
-            formattedAlert,
-            ...safeOld,
-          ].slice(0, 50);
+      try {
+        if (
+          !alert ||
+          typeof alert !==
+          "object"
+        ) {
+          return;
         }
-      );
+
+        // =====================================
+        // MULTI-TENANT SAFETY
+        // =====================================
+        if (
+          alert.user &&
+          alert.user !== user.id
+        ) {
+          return;
+        }
+
+        const formattedAlert = {
+          id:
+            alert.id ||
+            crypto.randomUUID(),
+
+          type:
+            alert.attackType ||
+            "Unknown Threat",
+
+          severity:
+            alert.severity ||
+            "medium",
+
+          source:
+            alert.ip ||
+            "Unknown",
+
+          time:
+            alert.timestamp ||
+            new Date().toISOString(),
+
+          status:
+            alert.status ||
+            "active",
+
+          anomalyScore:
+            alert.anomalyScore || 0,
+
+          meta:
+            alert.meta || {},
+        };
+
+        // =====================================
+        // DEDUPLICATION
+        // =====================================
+        queryClient.setQueryData(
+          ["alerts", user.id],
+          (oldData = []) => {
+            const exists =
+              oldData.some(
+                (a) =>
+                  a.id ===
+                  formattedAlert.id
+              );
+
+            if (exists)
+              return oldData;
+
+            return [
+              formattedAlert,
+              ...oldData,
+            ].slice(0, 50);
+          }
+        );
+      } catch (error) {
+        console.error(
+          "❌ Alert handler error:",
+          error.message
+        );
+      }
     };
 
-    // ================= REGISTER EVENTS =================
+    /**
+     * =====================================
+     * REGISTER EVENTS
+     * =====================================
+     */
     socket.on(
       "connect",
       handleConnect
@@ -243,12 +277,20 @@ export const useLiveTraffic = () => {
       handleNewAlert
     );
 
-    // ================= INITIAL STATE =================
+    /**
+     * =====================================
+     * INITIAL SOCKET STATE
+     * =====================================
+     */
     if (socket.connected) {
       setIsConnected(true);
     }
 
-    // ================= CLEANUP =================
+    /**
+     * =====================================
+     * CLEANUP
+     * =====================================
+     */
     return () => {
       if (!socketRef.current)
         return;

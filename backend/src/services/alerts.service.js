@@ -160,14 +160,26 @@ const createAlert = async (
       });
 
     /**
-     * ================= SOCKET EVENTS =================
-     */
-    if (io) {
+ * ================= SOCKET EVENTS =================
+ * Emits ONLY alert events.
+ *
+ * traffic_update events are handled
+ * centrally inside logs.service.js
+ * to prevent duplicate realtime events.
+ */
+    if (io && typeof io.to === "function") {
       const roomId =
         userId.toString();
 
+      /**
+       * ============================================
+       * SAFE ALERT PAYLOAD
+       * ============================================
+       */
       const alertPayload = {
-        id: alert._id,
+        id: alert._id.toString(),
+
+        user: userId,
 
         ip: alert.ip,
 
@@ -183,34 +195,33 @@ const createAlert = async (
         timestamp:
           alert.timestamp,
 
-        meta: alert.meta,
+        meta: {
+          requests:
+            alert.meta?.requests || 0,
+
+          failedLogins:
+            alert.meta?.failedLogins || 0,
+        },
+
+        status: "active",
       };
 
-      const trafficPayload = {
-        time:
-          new Date().toISOString(),
-
-        requests:
-          alert.meta?.requests || 0,
-
-        blocked:
-          ["high", "critical"].includes(
-            alert.severity
-          )
-            ? 1
-            : 0,
-      };
-
+      /**
+       * ============================================
+       * REALTIME ALERT EVENT
+       * ============================================
+       */
       io.to(roomId).emit(
         "new_alert",
         alertPayload
       );
 
-      io.to(roomId).emit(
-        "traffic_update",
-        trafficPayload
+      logger.info(
+        `📡 Alert emitted to room: ${roomId}`
       );
     }
+
+
 
     /**
      * ================= ALERT INTEGRATIONS =================

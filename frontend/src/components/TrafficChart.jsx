@@ -81,10 +81,7 @@ export const TrafficChart = ({
             No traffic data available
           </div>
         ) : (
-          <ResponsiveContainer
-            width="100%"
-            height="100%"
-          >
+          <ResponsiveContainer width="100%" height={300}>
             <AreaChart
               data={safeData}
               margin={{
