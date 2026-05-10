@@ -1,61 +1,38 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 // ================= ENV =================
-const EMAIL_USER =
-  process.env.EMAIL_USER?.trim();
-
-const EMAIL_PASS =
-  process.env.EMAIL_PASS?.trim();
+const RESEND_API_KEY =
+  process.env.RESEND_API_KEY?.trim();
 
 const ALERT_EMAIL =
   process.env.ALERT_EMAIL?.trim();
 
-// ================= GLOBAL TRANSPORTER =================
-let transporter = null;
+// ================= INIT =================
+let resend = null;
 
-// ================= CREATE TRANSPORTER =================
-const initializeTransporter = () => {
+// ================= CREATE CLIENT =================
+const initializeResend = () => {
   try {
-    if (!EMAIL_USER || !EMAIL_PASS) {
+    if (!RESEND_API_KEY) {
       console.warn(
-        "⚠️ EMAIL_USER or EMAIL_PASS missing"
+        "⚠️ RESEND_API_KEY missing"
       );
 
       return null;
     }
 
-    if (transporter) {
-      return transporter;
+    if (resend) {
+      return resend;
     }
 
-    transporter =
-      nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
+    resend = new Resend(
+      RESEND_API_KEY
+    );
 
-        auth: {
-          user: EMAIL_USER,
-          pass: EMAIL_PASS,
-        },
-
-        pool: true,
-        maxConnections: 5,
-        maxMessages: 100,
-
-        connectionTimeout: 15000,
-        greetingTimeout: 10000,
-        socketTimeout: 20000,
-
-        tls: {
-          rejectUnauthorized: false,
-        },
-      });
-
-    return transporter;
+    return resend;
   } catch (error) {
     console.error(
-      "❌ Transporter initialization failed:",
+      "❌ Failed to initialize Resend:",
       error.message
     );
 
@@ -63,37 +40,29 @@ const initializeTransporter = () => {
   }
 };
 
-// ================= VERIFY EMAIL =================
+// ================= VERIFY =================
 export const verifyEmailService =
-  async (retry = 3) => {
+  async () => {
     try {
-      const mailer =
-        initializeTransporter();
+      const client =
+        initializeResend();
 
-      if (!mailer) return;
+      if (!client) {
+        console.warn(
+          "⚠️ Email service unavailable"
+        );
 
-      await mailer.verify();
+        return;
+      }
 
       console.log(
-        "✅ Email service verified"
+        "✅ Resend email service ready"
       );
     } catch (error) {
       console.error(
-        `❌ Email verification failed: ${error.message}`
+        "❌ Email service verification failed:",
+        error.message
       );
-
-      // ================= RETRY =================
-      if (retry > 0) {
-        console.log(
-          `🔄 Retrying email verification... (${retry})`
-        );
-
-        setTimeout(() => {
-          verifyEmailService(
-            retry - 1
-          );
-        }, 5000);
-      }
     }
   };
 
@@ -101,24 +70,25 @@ export const verifyEmailService =
 export const sendEmailAlert =
   async (alert = {}) => {
     try {
-      const mailer =
-        initializeTransporter();
+      const client =
+        initializeResend();
 
-      if (!mailer) {
+      if (!client) {
         console.warn(
-          "⚠️ Email transporter unavailable"
+          "⚠️ Resend client unavailable"
         );
 
         return;
       }
 
+      // ================= RECEIVER =================
       const receiver =
         alert.recipientEmail ||
         ALERT_EMAIL;
 
       if (!receiver) {
         console.warn(
-          "⚠️ No alert email receiver configured"
+          "⚠️ No recipient email configured"
         );
 
         return;
@@ -162,52 +132,74 @@ export const sendEmailAlert =
         new Date().toISOString();
 
       // ================= EMAIL =================
-      const mailOptions = {
-        from: `"ThreatOps Security" <${EMAIL_USER}>`,
+      const response =
+        await client.emails.send({
+          from:
+            "ThreatOps <onboarding@resend.dev>",
 
-        to: receiver,
+          to: receiver,
 
-        subject: `🚨 Threat Alert [${severity.toUpperCase()}]`,
+          subject: `🚨 Threat Alert [${severity.toUpperCase()}]`,
 
-        text: `
-Threat Detected
+          html: `
+          <div style="font-family: Arial, sans-serif; padding: 20px; background: #111827; color: white; border-radius: 10px;">
 
-IP: ${ip}
-Attack Type: ${attackType}
-Severity: ${severity}
-Requests: ${requests}
-Failed Logins: ${failedLogins}
-Score: ${anomalyScore}
-Timestamp: ${timestamp}
-        `,
+            <h2 style="color: #ef4444;">
+              🚨 Threat Detected
+            </h2>
 
-        html: `
-        <div style="font-family: Arial; padding:20px;">
-          <h2 style="color:red;">
-            🚨 Threat Detected
-          </h2>
+            <p>
+              Suspicious activity detected by ThreatOps AI Engine.
+            </p>
 
-          <p><strong>IP:</strong> ${ip}</p>
-          <p><strong>Attack:</strong> ${attackType}</p>
-          <p><strong>Severity:</strong> ${severity}</p>
-          <p><strong>Requests:</strong> ${requests}</p>
-          <p><strong>Failed Logins:</strong> ${failedLogins}</p>
-          <p><strong>Score:</strong> ${anomalyScore}</p>
-          <p><strong>Time:</strong> ${timestamp}</p>
-        </div>
-        `,
-      };
+            <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
 
-      const info =
-        await mailer.sendMail(
-          mailOptions
-        );
+              <tr>
+                <td><strong>IP Address</strong></td>
+                <td>${ip}</td>
+              </tr>
+
+              <tr>
+                <td><strong>Attack Type</strong></td>
+                <td>${attackType}</td>
+              </tr>
+
+              <tr>
+                <td><strong>Severity</strong></td>
+                <td>${severity}</td>
+              </tr>
+
+              <tr>
+                <td><strong>Requests</strong></td>
+                <td>${requests}</td>
+              </tr>
+
+              <tr>
+                <td><strong>Failed Logins</strong></td>
+                <td>${failedLogins}</td>
+              </tr>
+
+              <tr>
+                <td><strong>Anomaly Score</strong></td>
+                <td>${anomalyScore}</td>
+              </tr>
+
+              <tr>
+                <td><strong>Timestamp</strong></td>
+                <td>${timestamp}</td>
+              </tr>
+
+            </table>
+
+          </div>
+          `,
+        });
 
       console.log(
-        `✅ Alert email sent: ${info.messageId}`
+        `✅ Alert email sent successfully`
       );
 
-      return info;
+      return response;
     } catch (error) {
       console.error(
         "❌ Failed to send alert email:",
