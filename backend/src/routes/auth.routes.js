@@ -104,4 +104,26 @@ router.post(
   authController.logout
 );
 
+/**
+ * ================= GET API KEY =================
+ */
+router.get(
+  "/api-key",
+
+  authMiddleware,
+
+  authController.getApiKey
+);
+
+/**
+ * ================= REGENERATE API KEY =================
+ */
+router.post(
+  "/regenerate-api-key",
+
+  authMiddleware,
+
+  authController.regenerateApiKey
+);
+
 export default router;

@@ -141,7 +141,7 @@ const refreshToken = catchAsync(async (req, res) => {
  */
 const logout = catchAsync(async (req, res) => {
   if (req.user?.id) {
-    await authService.logoutUser(req.user._id);
+    await authService.logoutUser(req.user.id);
   }
 
   clearTokens(res);
@@ -166,10 +166,50 @@ const getMe = catchAsync(async (req, res) => {
   );
 });
 
+/**
+ * ================= GET API KEY =================
+ */
+const getApiKey = catchAsync(async (req, res) => {
+  if (!req.user?.id) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
+
+  const apiKey = await authService.getUserApiKey(req.user.id);
+
+  return apiResponse(
+    res,
+    200,
+    true,
+    { apiKey },
+    "API key fetched successfully"
+  );
+});
+
+/**
+ * ================= REGENERATE API KEY =================
+ */
+const regenerateApiKey = catchAsync(async (req, res) => {
+  if (!req.user?.id) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
+
+  const apiKey = await authService.regenerateApiKey(req.user.id);
+
+  return apiResponse(
+    res,
+    200,
+    true,
+    { apiKey },
+    "API key regenerated successfully"
+  );
+});
+
 export default {
   register,
   login,
   refreshToken,
   logout,
   getMe,
+  getApiKey,
+  regenerateApiKey,
 };

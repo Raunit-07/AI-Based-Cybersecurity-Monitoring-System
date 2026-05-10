@@ -16,6 +16,22 @@ const INTERVAL =
   parseInt(process.env.SIMULATION_INTERVAL) || 3000;
 
 // ============================================
+// STARTUP VALIDATION
+// ============================================
+
+if (!API_KEY) {
+  console.error(
+    "❌ LOG_API_KEY is not set in .env\n" +
+    "   Get your API key by logging in and calling: GET /api/auth/api-key\n" +
+    "   Then set it in .env: LOG_API_KEY=your_key_here"
+  );
+  process.exit(1);
+}
+
+console.log(`📌 Target: ${API_URL}`);
+console.log(`🔑 API Key: ${API_KEY.slice(0, 8)}...${API_KEY.slice(-8)}`);
+
+// ============================================
 // TRAFFIC DATA
 // ============================================
 
@@ -146,10 +162,14 @@ async function sendLog(isAttack = false) {
       } | status: ${response.status}`
     );
   } catch (err) {
-    console.error(
-      "❌ Traffic simulation error:",
+    const errorMsg =
       err.response?.data?.message ||
-      err.message
+      err.response?.statusText ||
+      err.message ||
+      "Unknown error";
+
+    console.error(
+      `❌ Traffic simulation error: ${errorMsg}`
     );
   }
 }

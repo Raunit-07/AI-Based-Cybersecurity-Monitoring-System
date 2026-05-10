@@ -47,7 +47,7 @@ export const Dashboard = () => {
   ).size;
 
   const criticalAlerts = safeAlerts.filter(
-    (a) => a?.anomalyScore !== undefined && a.anomalyScore > 0.7
+    (a) => a?.anomalyScore !== undefined && a.anomalyScore > 0.4
   ).length;
 
   const currentRequests =

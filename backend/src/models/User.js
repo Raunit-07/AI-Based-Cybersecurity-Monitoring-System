@@ -75,7 +75,9 @@ userSchema.pre("save", async function () {
   }
 
   // ================= GENERATE API KEY =================
-  if (!this.apiKey) {
+  // Only generate on initial user creation
+  // NOT on every save (apiKey is select:false, so it's undefined on loaded docs)
+  if (this.isNew && !this.apiKey) {
 
     this.apiKey = crypto
       .randomBytes(32)

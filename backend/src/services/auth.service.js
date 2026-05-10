@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import crypto from "crypto";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
 
@@ -46,6 +47,7 @@ const buildSafeUser = (user) => {
     id: user._id?.toString(),
     email: user.email,
     role: user.role,
+    apiKey: user.apiKey || null,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   };
@@ -127,7 +129,7 @@ const loginUser = async (email, password) => {
   const normalizedEmail = normalizeEmailForDb(email);
 
   const user = await User.findOne({ email: normalizedEmail }).select(
-    "+password"
+    "+password +apiKey"
   );
 
   if (!user) {
@@ -225,9 +227,61 @@ const logoutUser = async (userId) => {
   });
 };
 
+/**
+ * ================= GET USER API KEY =================
+ */
+const getUserApiKey = async (userId) => {
+  if (!userId) {
+    const error = new Error("User ID required");
+    error.status = 400;
+    throw error;
+  }
+
+  const user = await User.findById(userId).select("+apiKey").lean();
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  return user.apiKey;
+};
+
+/**
+ * ================= REGENERATE API KEY =================
+ */
+const regenerateApiKey = async (userId) => {
+  if (!userId) {
+    const error = new Error("User ID required");
+    error.status = 400;
+    throw error;
+  }
+
+  const newApiKey = crypto.randomBytes(32).toString("hex");
+
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { apiKey: newApiKey },
+    { new: true }
+  ).select("+apiKey");
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.status = 404;
+    throw error;
+  }
+
+  logger.info(`API key regenerated for user: ${userId}`);
+
+  return user.apiKey;
+};
+
 export default {
   registerUser,
   loginUser,
   refreshAuthToken,
   logoutUser,
+  getUserApiKey,
+  regenerateApiKey,
 };
