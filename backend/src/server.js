@@ -222,7 +222,9 @@ const startServer =
        * ================= EMAIL =================
        */
       try {
-        await verifyEmailService();
+        setTimeout(() => {
+          verifyEmailService();
+        }, 8000);
 
         logger.info(
           "Email service verified"

@@ -1,44 +1,61 @@
 import nodemailer from "nodemailer";
 
-// ================= ENV VALIDATION =================
-const EMAIL_USER = process.env.EMAIL_USER?.trim();
-const EMAIL_PASS = process.env.EMAIL_PASS?.trim();
-const ALERT_EMAIL = process.env.ALERT_EMAIL?.trim();
+// ================= ENV =================
+const EMAIL_USER =
+  process.env.EMAIL_USER?.trim();
+
+const EMAIL_PASS =
+  process.env.EMAIL_PASS?.trim();
+
+const ALERT_EMAIL =
+  process.env.ALERT_EMAIL?.trim();
+
+// ================= GLOBAL TRANSPORTER =================
+let transporter = null;
 
 // ================= CREATE TRANSPORTER =================
-const createTransporter = () => {
+const initializeTransporter = () => {
   try {
     if (!EMAIL_USER || !EMAIL_PASS) {
       console.warn(
-        "⚠️ EMAIL_USER or EMAIL_PASS missing from environment variables"
+        "⚠️ EMAIL_USER or EMAIL_PASS missing"
       );
 
       return null;
     }
 
-    const transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
+    if (transporter) {
+      return transporter;
+    }
 
-      auth: {
-        user: EMAIL_USER,
-        pass: EMAIL_PASS,
-      },
+    transporter =
+      nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
 
-      tls: {
-        rejectUnauthorized: false,
-      },
+        auth: {
+          user: EMAIL_USER,
+          pass: EMAIL_PASS,
+        },
 
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
-    });
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+
+        connectionTimeout: 15000,
+        greetingTimeout: 10000,
+        socketTimeout: 20000,
+
+        tls: {
+          rejectUnauthorized: false,
+        },
+      });
 
     return transporter;
   } catch (error) {
     console.error(
-      "❌ Failed to create transporter:",
+      "❌ Transporter initialization failed:",
       error.message
     );
 
@@ -46,197 +63,158 @@ const createTransporter = () => {
   }
 };
 
-// ================= VERIFY EMAIL SERVICE =================
-export const verifyEmailService = async () => {
-  try {
-    const transporter = createTransporter();
+// ================= VERIFY EMAIL =================
+export const verifyEmailService =
+  async (retry = 3) => {
+    try {
+      const mailer =
+        initializeTransporter();
 
-    if (!transporter) {
-      console.warn(
-        "⚠️ Email transporter not initialized"
+      if (!mailer) return;
+
+      await mailer.verify();
+
+      console.log(
+        "✅ Email service verified"
+      );
+    } catch (error) {
+      console.error(
+        `❌ Email verification failed: ${error.message}`
       );
 
-      return;
+      // ================= RETRY =================
+      if (retry > 0) {
+        console.log(
+          `🔄 Retrying email verification... (${retry})`
+        );
+
+        setTimeout(() => {
+          verifyEmailService(
+            retry - 1
+          );
+        }, 5000);
+      }
     }
+  };
 
-    await transporter.verify();
+// ================= SEND EMAIL =================
+export const sendEmailAlert =
+  async (alert = {}) => {
+    try {
+      const mailer =
+        initializeTransporter();
 
-    console.log(
-      "✅ Email service verified successfully"
-    );
-  } catch (error) {
-    console.error(
-      "❌ Email config verification failed:",
-      error.message
-    );
-  }
-};
+      if (!mailer) {
+        console.warn(
+          "⚠️ Email transporter unavailable"
+        );
 
-// ================= SEND EMAIL ALERT =================
-export const sendEmailAlert = async (alert = {}) => {
-  try {
-    const transporter = createTransporter();
+        return;
+      }
 
-    if (!transporter) {
-      console.warn(
-        "⚠️ Cannot send email — transporter unavailable"
-      );
+      const receiver =
+        alert.recipientEmail ||
+        ALERT_EMAIL;
 
-      return;
-    }
+      if (!receiver) {
+        console.warn(
+          "⚠️ No alert email receiver configured"
+        );
 
-    // ================= SAFE VALIDATION =================
-    if (
-      !alert ||
-      typeof alert !== "object"
-    ) {
-      console.warn(
-        "⚠️ Invalid alert object received"
-      );
+        return;
+      }
 
-      return;
-    }
+      // ================= SAFE VALUES =================
+      const ip =
+        sanitize(alert.ip) ||
+        "Unknown IP";
 
-    // ================= RECEIVER =================
-    const receiver =
-      alert.recipientEmail ||
-      ALERT_EMAIL;
+      const attackType =
+        sanitize(
+          alert.attackType ||
+          alert.type
+        ) || "Unknown";
 
-    if (!receiver) {
-      console.warn(
-        "⚠️ No recipient email configured"
-      );
+      const severity =
+        sanitize(
+          alert.severity ||
+          getSeverity(alert)
+        ) || "low";
 
-      return;
-    }
+      const requests =
+        alert.meta?.requests ??
+        alert.requests ??
+        "N/A";
 
-    // ================= SANITIZED VALUES =================
-    const ip =
-      sanitize(alert.ip) ||
-      "Unknown IP";
+      const failedLogins =
+        alert.meta
+          ?.failedLogins ??
+        alert.failedLogins ??
+        "N/A";
 
-    const attackType =
-      sanitize(
-        alert.attackType ||
-        alert.type
-      ) || "Unknown";
+      const anomalyScore =
+        alert.anomalyScore ??
+        alert.anomaly_score ??
+        "N/A";
 
-    const severity =
-      sanitize(
-        alert.severity ||
-        getSeverity(alert)
-      ) || "low";
+      const timestamp =
+        alert.timestamp ||
+        new Date().toISOString();
 
-    const requests =
-      alert.meta?.requests ??
-      alert.requests ??
-      "N/A";
+      // ================= EMAIL =================
+      const mailOptions = {
+        from: `"ThreatOps Security" <${EMAIL_USER}>`,
 
-    const failedLogins =
-      alert.meta?.failedLogins ??
-      alert.failedLogins ??
-      "N/A";
+        to: receiver,
 
-    const anomalyScore =
-      alert.anomalyScore ??
-      alert.anomaly_score ??
-      "N/A";
+        subject: `🚨 Threat Alert [${severity.toUpperCase()}]`,
 
-    const timestamp =
-      alert.timestamp ||
-      new Date().toISOString();
+        text: `
+Threat Detected
 
-    // ================= SUBJECT =================
-    const subject = `🚨 ThreatOps Alert [${severity.toUpperCase()}]`;
-
-    // ================= TEXT =================
-    const text = `
-🚨 Threat Detected
-
-IP Address: ${ip}
+IP: ${ip}
 Attack Type: ${attackType}
 Severity: ${severity}
 Requests: ${requests}
 Failed Logins: ${failedLogins}
-Anomaly Score: ${anomalyScore}
+Score: ${anomalyScore}
 Timestamp: ${timestamp}
-`;
+        `,
 
-    // ================= HTML =================
-    const html = `
-    <div style="font-family: Arial, sans-serif; padding: 20px; background: #111827; color: white; border-radius: 10px;">
-      
-      <h2 style="color: #ef4444;">
-        🚨 Threat Detection Alert
-      </h2>
+        html: `
+        <div style="font-family: Arial; padding:20px;">
+          <h2 style="color:red;">
+            🚨 Threat Detected
+          </h2>
 
-      <p>
-        A suspicious activity was detected by the AI Threat Detection System.
-      </p>
+          <p><strong>IP:</strong> ${ip}</p>
+          <p><strong>Attack:</strong> ${attackType}</p>
+          <p><strong>Severity:</strong> ${severity}</p>
+          <p><strong>Requests:</strong> ${requests}</p>
+          <p><strong>Failed Logins:</strong> ${failedLogins}</p>
+          <p><strong>Score:</strong> ${anomalyScore}</p>
+          <p><strong>Time:</strong> ${timestamp}</p>
+        </div>
+        `,
+      };
 
-      <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
-        
-        <tr>
-          <td><strong>IP Address</strong></td>
-          <td>${ip}</td>
-        </tr>
+      const info =
+        await mailer.sendMail(
+          mailOptions
+        );
 
-        <tr>
-          <td><strong>Attack Type</strong></td>
-          <td>${attackType}</td>
-        </tr>
+      console.log(
+        `✅ Alert email sent: ${info.messageId}`
+      );
 
-        <tr>
-          <td><strong>Severity</strong></td>
-          <td>${severity}</td>
-        </tr>
-
-        <tr>
-          <td><strong>Requests</strong></td>
-          <td>${requests}</td>
-        </tr>
-
-        <tr>
-          <td><strong>Failed Logins</strong></td>
-          <td>${failedLogins}</td>
-        </tr>
-
-        <tr>
-          <td><strong>Anomaly Score</strong></td>
-          <td>${anomalyScore}</td>
-        </tr>
-
-        <tr>
-          <td><strong>Timestamp</strong></td>
-          <td>${timestamp}</td>
-        </tr>
-
-      </table>
-
-    </div>
-    `;
-
-    // ================= SEND =================
-    const info = await transporter.sendMail({
-      from: `"ThreatOps Security" <${EMAIL_USER}>`,
-      to: receiver,
-      subject,
-      text,
-      html,
-    });
-
-    console.log(
-      `✅ Alert email sent successfully to ${receiver}`
-    );
-
-    return info;
-  } catch (error) {
-    console.error(
-      "❌ Failed to send alert email:",
-      error.message
-    );
-  }
-};
+      return info;
+    } catch (error) {
+      console.error(
+        "❌ Failed to send alert email:",
+        error.message
+      );
+    }
+  };
 
 // ================= SANITIZE =================
 const sanitize = (value) => {
@@ -248,16 +226,20 @@ const sanitize = (value) => {
 };
 
 // ================= SEVERITY =================
-const getSeverity = (alert = {}) => {
+const getSeverity = (
+  alert = {}
+) => {
   if (
-    alert.attackType === "ddos" ||
+    alert.attackType ===
+    "ddos" ||
     alert.requests > 2000
   ) {
     return "high";
   }
 
   if (
-    alert.attackType === "bruteforce" ||
+    alert.attackType ===
+    "bruteforce" ||
     alert.failedLogins > 20
   ) {
     return "medium";
