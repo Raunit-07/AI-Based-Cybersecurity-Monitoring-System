@@ -1,245 +1,263 @@
 import nodemailer from "nodemailer";
 
+// ================= ENV VALIDATION =================
+const EMAIL_USER = process.env.EMAIL_USER?.trim();
+const EMAIL_PASS = process.env.EMAIL_PASS?.trim();
+const ALERT_EMAIL = process.env.ALERT_EMAIL?.trim();
+
 // ================= CREATE TRANSPORTER =================
 const createTransporter = () => {
-  const user =
-    process.env.EMAIL_USER?.trim();
+  try {
+    if (!EMAIL_USER || !EMAIL_PASS) {
+      console.warn(
+        "⚠️ EMAIL_USER or EMAIL_PASS missing from environment variables"
+      );
 
-  const pass =
-    process.env.EMAIL_PASS?.trim();
+      return null;
+    }
 
-  if (!user || !pass) {
-    console.warn(
-      "⚠️ Email ENV not loaded (EMAIL_USER / EMAIL_PASS missing)"
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+
+      auth: {
+        user: EMAIL_USER,
+        pass: EMAIL_PASS,
+      },
+
+      tls: {
+        rejectUnauthorized: false,
+      },
+
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 15000,
+    });
+
+    return transporter;
+  } catch (error) {
+    console.error(
+      "❌ Failed to create transporter:",
+      error.message
     );
 
     return null;
   }
-
-  return nodemailer.createTransport({
-    service: "gmail",
-
-    auth: {
-      user,
-      pass,
-    },
-
-    connectionTimeout: 5000,
-  });
 };
 
-// ================= VERIFY CONNECTION =================
-export const verifyEmailService =
-  async () => {
-    try {
-      const transporter =
-        createTransporter();
+// ================= VERIFY EMAIL SERVICE =================
+export const verifyEmailService = async () => {
+  try {
+    const transporter = createTransporter();
 
-      if (!transporter) return;
-
-      await transporter.verify();
-
-      console.log(
-        "✅ Email service ready"
+    if (!transporter) {
+      console.warn(
+        "⚠️ Email transporter not initialized"
       );
-    } catch (error) {
-      console.error(
-        "❌ Email config error:",
-        error.message
-      );
+
+      return;
     }
-  };
 
-// ================= MAIN FUNCTION =================
-export const sendEmailAlert =
-  async (alert = {}) => {
-    try {
-      const transporter =
-        createTransporter();
+    await transporter.verify();
 
-      if (!transporter) return;
+    console.log(
+      "✅ Email service verified successfully"
+    );
+  } catch (error) {
+    console.error(
+      "❌ Email config verification failed:",
+      error.message
+    );
+  }
+};
 
-      // ================= VALIDATION =================
-      if (!alert) {
-        console.warn(
-          "⚠️ No alert data provided"
-        );
+// ================= SEND EMAIL ALERT =================
+export const sendEmailAlert = async (alert = {}) => {
+  try {
+    const transporter = createTransporter();
 
-        return;
-      }
+    if (!transporter) {
+      console.warn(
+        "⚠️ Cannot send email — transporter unavailable"
+      );
 
-      // ✅ IMPORTANT
-      // Simulator/logWatcher alerts have no user owner — skip silently
-      if (
-        !alert.recipientEmail
-      ) {
-        if (
-          process.env.NODE_ENV !== "production"
-        ) {
-          console.debug(
-            "📧 Skipping email — no recipient (expected for simulator traffic)"
-          );
-        }
+      return;
+    }
 
-        return;
-      }
+    // ================= SAFE VALIDATION =================
+    if (
+      !alert ||
+      typeof alert !== "object"
+    ) {
+      console.warn(
+        "⚠️ Invalid alert object received"
+      );
 
-      // ================= SAFE DATA =================
-      const ip =
-        sanitize(alert.ip) ||
-        "Unknown IP";
+      return;
+    }
 
-      const type =
-        sanitize(
-          alert.attackType ||
-          alert.type
-        ) || "unknown";
+    // ================= RECEIVER =================
+    const receiver =
+      alert.recipientEmail ||
+      ALERT_EMAIL;
 
-      const severity =
-        sanitize(
-          alert.severity ||
-          getSeverity(alert)
-        ) || "low";
+    if (!receiver) {
+      console.warn(
+        "⚠️ No recipient email configured"
+      );
 
-      const requests =
-        alert.meta?.requests ??
-        alert.requests ??
-        "N/A";
+      return;
+    }
 
-      const failedLogins =
-        alert.meta
-          ?.failedLogins ??
-        alert.failedLogins ??
-        "N/A";
+    // ================= SANITIZED VALUES =================
+    const ip =
+      sanitize(alert.ip) ||
+      "Unknown IP";
 
-      const score =
-        alert.anomalyScore ??
-        alert.anomaly_score ??
-        "N/A";
+    const attackType =
+      sanitize(
+        alert.attackType ||
+        alert.type
+      ) || "Unknown";
 
-      const timestamp =
-        alert.timestamp ||
-        new Date().toISOString();
+    const severity =
+      sanitize(
+        alert.severity ||
+        getSeverity(alert)
+      ) || "low";
 
-      // ================= RECEIVER =================
-      const receiver =
-        alert.recipientEmail;
+    const requests =
+      alert.meta?.requests ??
+      alert.requests ??
+      "N/A";
 
-      // ================= SUBJECT =================
-      const subject = `🚨 Security Alert [${severity.toUpperCase()}] - ${type}`;
+    const failedLogins =
+      alert.meta?.failedLogins ??
+      alert.failedLogins ??
+      "N/A";
 
-      // ================= TEXT =================
-      const text = `
+    const anomalyScore =
+      alert.anomalyScore ??
+      alert.anomaly_score ??
+      "N/A";
+
+    const timestamp =
+      alert.timestamp ||
+      new Date().toISOString();
+
+    // ================= SUBJECT =================
+    const subject = `🚨 ThreatOps Alert [${severity.toUpperCase()}]`;
+
+    // ================= TEXT =================
+    const text = `
 🚨 Threat Detected
 
-IP: ${ip}
-Type: ${type}
+IP Address: ${ip}
+Attack Type: ${attackType}
 Severity: ${severity}
 Requests: ${requests}
 Failed Logins: ${failedLogins}
-Score: ${score}
-Time: ${timestamp}
+Anomaly Score: ${anomalyScore}
+Timestamp: ${timestamp}
 `;
 
-      // ================= HTML =================
-      const html = `
-      <div style="font-family: Arial, sans-serif; padding: 20px;">
-        <h2 style="color: red;">
-          🚨 Threat Detected
-        </h2>
+    // ================= HTML =================
+    const html = `
+    <div style="font-family: Arial, sans-serif; padding: 20px; background: #111827; color: white; border-radius: 10px;">
+      
+      <h2 style="color: #ef4444;">
+        🚨 Threat Detection Alert
+      </h2>
 
-        <table style="border-collapse: collapse; width: 100%;">
+      <p>
+        A suspicious activity was detected by the AI Threat Detection System.
+      </p>
 
-          <tr>
-            <td><strong>IP</strong></td>
-            <td>${ip}</td>
-          </tr>
+      <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+        
+        <tr>
+          <td><strong>IP Address</strong></td>
+          <td>${ip}</td>
+        </tr>
 
-          <tr>
-            <td><strong>Type</strong></td>
-            <td>${type}</td>
-          </tr>
+        <tr>
+          <td><strong>Attack Type</strong></td>
+          <td>${attackType}</td>
+        </tr>
 
-          <tr>
-            <td><strong>Severity</strong></td>
-            <td>${severity}</td>
-          </tr>
+        <tr>
+          <td><strong>Severity</strong></td>
+          <td>${severity}</td>
+        </tr>
 
-          <tr>
-            <td><strong>Requests</strong></td>
-            <td>${requests}</td>
-          </tr>
+        <tr>
+          <td><strong>Requests</strong></td>
+          <td>${requests}</td>
+        </tr>
 
-          <tr>
-            <td><strong>Failed Logins</strong></td>
-            <td>${failedLogins}</td>
-          </tr>
+        <tr>
+          <td><strong>Failed Logins</strong></td>
+          <td>${failedLogins}</td>
+        </tr>
 
-          <tr>
-            <td><strong>Score</strong></td>
-            <td>${score}</td>
-          </tr>
+        <tr>
+          <td><strong>Anomaly Score</strong></td>
+          <td>${anomalyScore}</td>
+        </tr>
 
-          <tr>
-            <td><strong>Time</strong></td>
-            <td>${timestamp}</td>
-          </tr>
+        <tr>
+          <td><strong>Timestamp</strong></td>
+          <td>${timestamp}</td>
+        </tr>
 
-        </table>
-      </div>
-      `;
+      </table>
 
-      // ================= SEND EMAIL =================
-      await transporter.sendMail({
-        from: `"ThreatOps Alerts" <${process.env.EMAIL_USER}>`,
+    </div>
+    `;
 
-        to: receiver,
+    // ================= SEND =================
+    const info = await transporter.sendMail({
+      from: `"ThreatOps Security" <${EMAIL_USER}>`,
+      to: receiver,
+      subject,
+      text,
+      html,
+    });
 
-        subject,
+    console.log(
+      `✅ Alert email sent successfully to ${receiver}`
+    );
 
-        text,
-
-        html,
-      });
-
-      console.log(
-        `📧 Alert email sent to ${receiver}`
-      );
-    } catch (error) {
-      console.error(
-        "❌ Email Error:",
-        error.message
-      );
-    }
-  };
+    return info;
+  } catch (error) {
+    console.error(
+      "❌ Failed to send alert email:",
+      error.message
+    );
+  }
+};
 
 // ================= SANITIZE =================
 const sanitize = (value) => {
   if (!value) return "";
 
-  return String(value).replace(
-    /[<>]/g,
-    ""
-  );
+  return String(value)
+    .replace(/[<>]/g, "")
+    .trim();
 };
 
-// ================= SEVERITY HELPER =================
-const getSeverity = (
-  alert
-) => {
-  if (!alert) return "low";
-
+// ================= SEVERITY =================
+const getSeverity = (alert = {}) => {
   if (
-    alert.attackType ===
-    "ddos" ||
+    alert.attackType === "ddos" ||
     alert.requests > 2000
   ) {
     return "high";
   }
 
   if (
-    alert.attackType ===
-    "bruteforce" ||
+    alert.attackType === "bruteforce" ||
     alert.failedLogins > 20
   ) {
     return "medium";
