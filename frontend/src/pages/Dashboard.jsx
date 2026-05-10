@@ -3,7 +3,7 @@ import { TrafficChart } from "../components/TrafficChart";
 import { AlertsList } from "../components/AlertsList";
 import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
 
-import { subscribeToAlerts } from "../services/socket";
+
 import { fetchAlerts } from "../services/api"; // ✅ NEW
 import { useSuspiciousIPs } from "../hooks/useThreatData";
 import { useLiveTraffic } from "../hooks/useLiveTraffic";
@@ -37,25 +37,7 @@ export const Dashboard = () => {
     loadAlerts();
   }, []);
 
-  // ================= SOCKET ALERTS =================
-  useEffect(() => {
-    const unsubscribe = subscribeToAlerts((alert) => {
-      if (!alert || !alert.ip) return; // ✅ safety
 
-      setAlerts((prev) => {
-        // 🔥 Prevent duplicates (based on _id or timestamp+ip fallback)
-        const exists = prev.some(
-          (a) => a._id === alert._id || (a.ip === alert.ip && a.timestamp === alert.timestamp)
-        );
-
-        if (exists) return prev;
-
-        return [alert, ...prev].slice(0, 100);
-      });
-    });
-
-    return () => unsubscribe();
-  }, []);
 
   // ================= SUSPICIOUS IPS =================
   const { data: ips = [], isLoading: isLoadingIPs } = useSuspiciousIPs();
@@ -77,7 +59,7 @@ export const Dashboard = () => {
   ).size;
 
   const criticalAlerts = safeAlerts.filter(
-    (a) => a?.anomalyScore !== undefined && a.anomalyScore < -0.7
+    (a) => a?.anomalyScore !== undefined && a.anomalyScore > 0.7
   ).length;
 
   const currentRequests =

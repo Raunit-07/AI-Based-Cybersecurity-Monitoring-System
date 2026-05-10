@@ -28,7 +28,7 @@ export const logValidator = [
   body("method")
     .notEmpty()
     .withMessage("HTTP Method is required")
-    .isIn(["GET", "POST", "PUT", "DELETE"])
+    .isIn(["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"])
     .withMessage("Invalid HTTP method"),
 
   // ✅ User Agent (optional)

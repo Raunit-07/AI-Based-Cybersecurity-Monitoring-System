@@ -115,11 +115,11 @@ const createAlert = async (
      */
     const severity =
       alertData.severity ||
-      (anomalyScore < -0.8
+      (anomalyScore > 0.8
         ? "critical"
-        : anomalyScore < -0.6
+        : anomalyScore > 0.6
           ? "high"
-          : anomalyScore < -0.4
+          : anomalyScore > 0.4
             ? "medium"
             : "low");
 

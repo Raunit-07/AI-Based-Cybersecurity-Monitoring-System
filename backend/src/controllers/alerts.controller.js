@@ -557,13 +557,13 @@ const getAlertStats =
 const getSeverity = (
   score = 0
 ) => {
-  if (score < -0.7)
+  if (score > 0.7)
     return "critical";
 
-  if (score < -0.5)
+  if (score > 0.5)
     return "high";
 
-  if (score < -0.3)
+  if (score > 0.3)
     return "medium";
 
   return "low";

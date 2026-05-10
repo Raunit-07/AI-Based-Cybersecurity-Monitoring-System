@@ -6,6 +6,8 @@ import { detectThreat } from "./mlClient.js";
 
 import logger from "../utils/logger.js";
 
+import { emitTrafficUpdate } from "./realtime.service.js";
+
 /**
  * ================= NORMALIZE ATTACK TYPE =================
  */
@@ -99,7 +101,7 @@ const getSeverity = (data, prediction) => {
   if (
     prediction.attackType === "ddos" ||
     data.requests > 2000 ||
-    prediction.anomaly_score < -0.8
+    prediction.anomaly_score > 0.8
   ) {
     return "critical";
   }
@@ -107,12 +109,12 @@ const getSeverity = (data, prediction) => {
   if (
     prediction.attackType === "bruteforce" ||
     data.failedLogins > 20 ||
-    prediction.anomaly_score < -0.6
+    prediction.anomaly_score > 0.6
   ) {
     return "high";
   }
 
-  if (prediction.anomaly_score < -0.4) {
+  if (prediction.anomaly_score > 0.4) {
     return "medium";
   }
 
@@ -124,320 +126,320 @@ const getSeverity = (data, prediction) => {
  * Multi-user SaaS safe
  */
 const processLog = async (
-  logData,
-  io,
-  userId
-) => {
-  try {
-    /**
-     * ================= VALIDATION =================
-     */
-    if (!logData || !logData.ip) {
-      throw new Error("Invalid log data");
-    }
-
-    if (!userId) {
-      throw new Error(
-        "Missing userId in processLog"
-      );
-    }
-
-    const cleanData =
-      sanitizeLogData(logData);
-
-    /**
-     * ================= ML DETECTION =================
-     */
-    let prediction = {
-      is_anomaly: false,
-      anomaly_score: 0,
-      attackType: "normal",
-    };
-
+    logData,
+    io,
+    userId
+  ) => {
     try {
-      const mlResponse =
-        await detectThreat({
-          ip: cleanData.ip,
+      /**
+       * ================= VALIDATION =================
+       */
+      if (!logData || !logData.ip) {
+        throw new Error("Invalid log data");
+      }
 
-          requests:
-            cleanData.requests,
+      if (!userId) {
+        throw new Error(
+          "Missing userId in processLog"
+        );
+      }
 
-          failedLogins:
-            cleanData.failedLogins,
+      const cleanData =
+        sanitizeLogData(logData);
 
-          method:
-            cleanData.method,
+      /**
+       * ================= ML DETECTION =================
+       */
+      let prediction = {
+        is_anomaly: false,
+        anomaly_score: 0,
+        attackType: "normal",
+      };
 
-          endpoint:
-            cleanData.endpoint,
-        });
-
-      prediction =
-        mlResponse?.data ||
-        mlResponse ||
-        prediction;
-    } catch (error) {
-      logger.error(
-        `❌ ML Error: ${error.message}`
-      );
-    }
-
-    /**
-     * ================= HYBRID DETECTION =================
-     */
-    const isAnomaly =
-      prediction.is_anomaly === true ||
-      cleanData.requests > 800 ||
-      cleanData.failedLogins > 10;
-
-    const anomalyScore =
-      Number(
-        prediction.anomaly_score
-      ) || 0;
-
-    /**
-     * ================= DETERMINE ATTACK TYPE =================
-     */
-    let rawAttackType =
-      "Normal";
-
-    if (
-      cleanData.failedLogins > 10
-    ) {
-      rawAttackType =
-        "Brute Force";
-    } else if (
-      cleanData.requests > 800
-    ) {
-      rawAttackType = "DDoS";
-    } else if (
-      prediction.attackType &&
-      prediction.attackType !==
-      "normal"
-    ) {
-      rawAttackType =
-        prediction.attackType;
-    } else if (isAnomaly) {
-      rawAttackType =
-        "Suspicious";
-    }
-
-    const attackType =
-      normalizeAttackType(
-        rawAttackType
-      );
-
-    const severity =
-      getSeverity(cleanData, {
-        ...prediction,
-
-        attackType:
-          attackType
-            .toLowerCase()
-            .replace(/\s+/g, ""),
-      });
-
-    /**
-     * ================= SAVE LOG =================
-     */
-    const log =
-      await Log.create({
-        ...cleanData,
-
-        user: userId,
-
-        is_anomaly:
-          isAnomaly,
-
-        anomaly_score:
-          anomalyScore,
-
-        attackType,
-      });
-
-
-    /**
-* ================= LIVE TRAFFIC =================
-* Emit ALL traffic activity
-*/
-    emitTrafficUpdate(io, userId, {
-      requests: cleanData.requests,
-
-      isAnomaly,
-
-      ip: cleanData.ip,
-
-      attackType,
-    });
-
-    /**
-     * ================= CREATE ALERT =================
-     *
-     * IMPORTANT:
-     * alerts.service.js handles:
-     * - socket emissions
-     * - traffic_update events
-     * - real-time updates
-     *
-     * DO NOT emit traffic here
-     * to prevent duplicate frontend events.
-     */
-    let alert = null;
-
-    if (isAnomaly) {
-      alert =
-        await createAlert(
-          {
-            ip: log.ip,
-
-            anomalyScore,
-
-            attackType,
-
-            severity,
+      try {
+        const mlResponse =
+          await detectThreat({
+            ip: cleanData.ip,
 
             requests:
-              log.requests,
+              cleanData.requests,
 
             failedLogins:
-              log.failedLogins,
+              cleanData.failedLogins,
 
-            timestamp:
-              new Date(),
-          },
+            method:
+              cleanData.method,
 
-          io,
+            endpoint:
+              cleanData.endpoint,
+          });
 
-          userId
+        prediction =
+          mlResponse?.data ||
+          mlResponse ||
+          prediction;
+      } catch (error) {
+        logger.error(
+          `❌ ML Error: ${error.message}`
         );
-    }
+      }
 
-    logger.info(
-      `✅ Log processed for user: ${userId}`
-    );
+      /**
+       * ================= HYBRID DETECTION =================
+       */
+      const isAnomaly =
+        prediction.is_anomaly === true ||
+        cleanData.requests > 800 ||
+        cleanData.failedLogins > 10;
 
-    return {
-      log,
+      const anomalyScore =
+        Number(
+          prediction.anomaly_score
+        ) || 0;
 
-      mlResult: {
-        is_anomaly:
-          isAnomaly,
+      /**
+       * ================= DETERMINE ATTACK TYPE =================
+       */
+      let rawAttackType =
+        "Normal";
 
-        anomaly_score:
-          anomalyScore,
+      if (
+        cleanData.failedLogins > 10
+      ) {
+        rawAttackType =
+          "Brute Force";
+      } else if (
+        cleanData.requests > 800
+      ) {
+        rawAttackType = "DDoS";
+      } else if (
+        prediction.attackType &&
+        prediction.attackType !==
+        "normal"
+      ) {
+        rawAttackType =
+          prediction.attackType;
+      } else if (isAnomaly) {
+        rawAttackType =
+          "Suspicious";
+      }
+
+      const attackType =
+        normalizeAttackType(
+          rawAttackType
+        );
+
+      const severity =
+        getSeverity(cleanData, {
+          ...prediction,
+
+          attackType:
+            attackType
+              .toLowerCase()
+              .replace(/\s+/g, ""),
+        });
+
+      /**
+       * ================= SAVE LOG =================
+       */
+      const log =
+        await Log.create({
+          ...cleanData,
+
+          user: userId,
+
+          is_anomaly:
+            isAnomaly,
+
+          anomaly_score:
+            anomalyScore,
+
+          attackType,
+        });
+
+
+      /**
+  * ================= LIVE TRAFFIC =================
+  * Emit ALL traffic activity
+  */
+      emitTrafficUpdate(io, userId, {
+        requests: cleanData.requests,
+
+        isAnomaly,
+
+        ip: cleanData.ip,
 
         attackType,
+      });
 
-        severity,
-      },
+      /**
+       * ================= CREATE ALERT =================
+       *
+       * IMPORTANT:
+       * alerts.service.js handles:
+       * - socket emissions
+       * - traffic_update events
+       * - real-time updates
+       *
+       * DO NOT emit traffic here
+       * to prevent duplicate frontend events.
+       */
+      let alert = null;
 
-      alert,
-    };
-  } catch (error) {
-    logger.error(
-      `❌ processLog Error: ${error.message}`
-    );
+      if (isAnomaly) {
+        alert =
+          await createAlert(
+            {
+              ip: log.ip,
 
-    throw error;
-  }
-};
+              anomalyScore,
 
+              attackType,
 
-/**
- * ================= GET USER LOGS =================
- * Multi-user safe historical logs
- */
-const getLogs = async (
-  userId,
-  options = {}
-) => {
-  try {
-    if (!userId) {
-      throw new Error(
-        "User ID is required"
-      );
-    }
+              severity,
 
-    // ================= PAGINATION =================
-    const limit = Math.min(
-      Number(options.limit) || 100,
-      500
-    );
+              requests:
+                log.requests,
 
-    const page = Math.max(
-      Number(options.page) || 1,
-      1
-    );
+              failedLogins:
+                log.failedLogins,
 
-    const skip =
-      (page - 1) * limit;
+              timestamp:
+                new Date(),
+            },
 
-    // ================= FILTERS =================
-    const query = {
-      user: userId,
-    };
+            io,
 
-    if (
-      options.attackType &&
-      allowedAttackTypes.includes(
-        options.attackType
-      )
-    ) {
-      query.attackType =
-        options.attackType;
-    }
+            userId
+          );
+      }
 
-    if (
-      typeof options.is_anomaly !==
-      "undefined"
-    ) {
-      query.is_anomaly =
-        options.is_anomaly;
-    }
-
-    // ================= FETCH LOGS =================
-    const logs =
-      await Log.find(query)
-        .sort({
-          createdAt: -1,
-        })
-        .skip(skip)
-        .limit(limit)
-        .lean();
-
-    // ================= TOTAL =================
-    const total =
-      await Log.countDocuments(
-        query
+      logger.info(
+        `✅ Log processed for user: ${userId}`
       );
 
-    return {
-      logs,
+      return {
+        log,
 
-      pagination: {
-        total,
+        mlResult: {
+          is_anomaly:
+            isAnomaly,
 
-        page,
+          anomaly_score:
+            anomalyScore,
 
-        limit,
+          attackType,
 
-        pages: Math.ceil(
-          total / limit
-        ),
-      },
-    };
-  } catch (error) {
-    logger.error(
-      `❌ getLogs Error: ${error.message}`
-    );
+          severity,
+        },
 
-    throw error;
-  }
-};
+        alert,
+      };
+    } catch (error) {
+      logger.error(
+        `❌ processLog Error: ${error.message}`
+      );
+
+      throw error;
+    }
+  };
 
 
-export default {
-  processLog,
+  /**
+   * ================= GET USER LOGS =================
+   * Multi-user safe historical logs
+   */
+  const getLogs = async (
+    userId,
+    options = {}
+  ) => {
+    try {
+      if (!userId) {
+        throw new Error(
+          "User ID is required"
+        );
+      }
 
-  getLogs,
-};
+      // ================= PAGINATION =================
+      const limit = Math.min(
+        Number(options.limit) || 100,
+        500
+      );
+
+      const page = Math.max(
+        Number(options.page) || 1,
+        1
+      );
+
+      const skip =
+        (page - 1) * limit;
+
+      // ================= FILTERS =================
+      const query = {
+        user: userId,
+      };
+
+      if (
+        options.attackType &&
+        allowedAttackTypes.includes(
+          options.attackType
+        )
+      ) {
+        query.attackType =
+          options.attackType;
+      }
+
+      if (
+        typeof options.is_anomaly !==
+        "undefined"
+      ) {
+        query.is_anomaly =
+          options.is_anomaly;
+      }
+
+      // ================= FETCH LOGS =================
+      const logs =
+        await Log.find(query)
+          .sort({
+            createdAt: -1,
+          })
+          .skip(skip)
+          .limit(limit)
+          .lean();
+
+      // ================= TOTAL =================
+      const total =
+        await Log.countDocuments(
+          query
+        );
+
+      return {
+        logs,
+
+        pagination: {
+          total,
+
+          page,
+
+          limit,
+
+          pages: Math.ceil(
+            total / limit
+          ),
+        },
+      };
+    } catch (error) {
+      logger.error(
+        `❌ getLogs Error: ${error.message}`
+      );
+
+      throw error;
+    }
+  };
+
+
+  export default {
+    processLog,
+
+    getLogs,
+  };
