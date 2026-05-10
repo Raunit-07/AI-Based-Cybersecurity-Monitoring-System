@@ -8,7 +8,6 @@ import compression from "compression";
 import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
 import alertRoutes from "./routes/alerts.routes.js";
-
 import alertsController from "./controllers/alerts.controller.js";
 
 import { authMiddleware } from "./middlewares/auth.middleware.js";
@@ -17,55 +16,52 @@ import { attachIO } from "./middlewares/socket.js";
 const app = express();
 
 /**
- * ==================================================
- * BASIC SETTINGS
- * ==================================================
+ * ================= BASIC SETTINGS =================
  */
-app.set("trust proxy", true);
+app.set("trust proxy", 1);
 
 /**
- * ==================================================
- * SECURITY HEADERS
- * ==================================================
+ * ================= SECURITY =================
  */
 app.use(
   helmet({
     crossOriginResourcePolicy: {
       policy: "cross-origin",
     },
-
-    contentSecurityPolicy: false,
   })
 );
 
 /**
- * ==================================================
- * CORS
- * ==================================================
+ * ================= CORS =================
+ */
+/**
+ * ================= CORS =================
  */
 const allowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
+  "http://localhost:5174",
+
+  // ✅ PRODUCTION FRONTEND
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
 const corsOptions = {
   origin: (origin, callback) => {
-    // Allow server-to-server / Postman
+    // ✅ allow mobile apps / postman / server-to-server
     if (!origin) {
       return callback(null, true);
     }
 
+    // ✅ allow configured origins
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
 
-    console.error(
-      `❌ Blocked by CORS: ${origin}`
-    );
+    console.error(`❌ CORS blocked for origin: ${origin}`);
 
     return callback(
-      new Error("CORS policy violation"),
+      new Error(`Not allowed by CORS: ${origin}`),
       false
     );
   },
@@ -87,42 +83,34 @@ const corsOptions = {
   ],
 };
 
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    status: "healthy",
+    service: "threatops-backend",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// ✅ APPLY CORS
 app.use(cors(corsOptions));
 
-/**
- * Express v5 preflight fix
- */
+// ✅ EXPRESS V5 PREFLIGHT FIX
 app.options(/.*/, cors(corsOptions));
 
 /**
- * ==================================================
- * BODY PARSER
- * ==================================================
+ * ================= BODY PARSING =================
  */
-app.use(
-  express.json({
-    limit: "20kb",
-  })
-);
-
-app.use(
-  express.urlencoded({
-    extended: true,
-    limit: "20kb",
-  })
-);
-
+app.use(express.json({ limit: "10kb" }));
+app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
 
 /**
- * ==================================================
- * SAFE SANITIZER
- * ==================================================
+ * ================= SAFE CUSTOM SANITIZER =================
  */
 const sanitizeObject = (obj) => {
-  if (!obj || typeof obj !== "object") {
-    return obj;
-  }
+  if (!obj || typeof obj !== "object") return obj;
 
   if (Array.isArray(obj)) {
     return obj.map(sanitizeObject);
@@ -131,15 +119,10 @@ const sanitizeObject = (obj) => {
   const cleaned = {};
 
   for (const [key, value] of Object.entries(obj)) {
-    const safeKey = key
-      .replace(/\$/g, "")
-      .replace(/\./g, "");
+    const safeKey = key.replace(/\$/g, "").replace(/\./g, "");
 
     cleaned[safeKey] =
-      value &&
-        typeof value === "object"
-        ? sanitizeObject(value)
-        : value;
+      value && typeof value === "object" ? sanitizeObject(value) : value;
   }
 
   return cleaned;
@@ -148,224 +131,144 @@ const sanitizeObject = (obj) => {
 app.use((req, res, next) => {
   try {
     if (req.body) {
-      req.body =
-        sanitizeObject(req.body);
+      req.body = sanitizeObject(req.body);
     }
 
     if (req.params) {
-      req.params =
-        sanitizeObject(req.params);
+      req.params = sanitizeObject(req.params);
     }
 
     if (req.query) {
-      req.query =
-        sanitizeObject(req.query);
+      Object.defineProperty(req, "query", {
+        value: sanitizeObject({ ...req.query }),
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      });
     }
 
-    next();
+    return next();
   } catch (error) {
-    next(error);
+    return next(error);
   }
 });
 
 /**
- * ==================================================
- * COMPRESSION
- * ==================================================
+ * ================= COMPRESSION =================
  */
 app.use(compression());
 
 /**
- * ==================================================
- * RATE LIMITING
- * ==================================================
+ * ================= GLOBAL RATE LIMIT =================
  */
-const apiLimiter = rateLimit({
+const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-
-  max: 250,
-
+  max: 200,
   standardHeaders: true,
-
   legacyHeaders: false,
-
-  message: {
-    success: false,
-    message:
-      "Too many requests. Please try again later.",
+  handler: (req, res) => {
+    return res.status(429).json({
+      success: false,
+      data: null,
+      message: "Too many requests, please try again later",
+    });
   },
 });
 
-app.use("/api", apiLimiter);
+app.use("/api", limiter);
 
 /**
- * ==================================================
- * SOCKET.IO ATTACHMENT
- * ==================================================
+ * ================= SOCKET.IO =================
  */
 app.use(attachIO);
 
 /**
- * ==================================================
- * HEALTH ROUTES
- * ==================================================
+ * ================= HEALTH =================
  */
 app.get("/", (req, res) => {
-  res.status(200).json({
-    success: true,
-    service: "ThreatOps Backend",
-    status: "running",
-  });
-});
-
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    success: true,
-    service: "ThreatOps Backend",
-    status: "healthy",
-    uptime: process.uptime(),
-    timestamp:
-      new Date().toISOString(),
-  });
+  res.status(200).send("Backend API Running ✅");
 });
 
 app.get("/api/health", (req, res) => {
   res.status(200).json({
     success: true,
-    service: "ThreatOps API",
-    status: "healthy",
+    message: "Backend API Running ✅",
   });
 });
 
 /**
- * ==================================================
- * ROUTES
- * ==================================================
+ * ================= ROUTES =================
  */
 app.use("/api/auth", authRoutes);
-
 app.use("/api/logs", logsRoutes);
-
 app.use("/api/alerts", alertRoutes);
 
-app.get(
-  "/api/ips",
-  authMiddleware,
-  alertsController.getSuspiciousIPs
-);
+app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 
 /**
- * ==================================================
- * DEBUG ROUTE
- * ==================================================
+ * ================= DEBUG ROUTE =================
  */
-if (
-  process.env.NODE_ENV !==
-  "production"
-) {
+if (process.env.NODE_ENV !== "production") {
   app.get("/test", (req, res) => {
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "TEST OK",
-      });
+    res.status(200).send("TEST OK");
   });
 }
 
 /**
- * ==================================================
- * 404 HANDLER
- * ==================================================
+ * ================= 404 =================
  */
 app.use((req, res) => {
   res.status(404).json({
     success: false,
+    data: null,
     message: "Route not found",
   });
 });
 
 /**
- * ==================================================
- * GLOBAL ERROR HANDLER
- * ==================================================
+ * ================= GLOBAL ERROR HANDLER =================
  */
-app.use(
-  (err, req, res, next) => {
-    let statusCode =
-      err.statusCode ||
-      err.status ||
-      500;
+app.use((err, req, res, next) => {
+  let statusCode = err.statusCode || err.status || 500;
+  let message = err.message || "Internal Server Error";
 
-    let message =
-      err.message ||
-      "Internal Server Error";
-
-    // Mongoose validation
-    if (
-      err.name ===
-      "ValidationError"
-    ) {
-      statusCode = 400;
-
-      message = Object.values(
-        err.errors
-      )
-        .map((val) => val.message)
-        .join(", ");
-    }
-
-    // Mongo duplicate key
-    if (err.code === 11000) {
-      statusCode = 409;
-
-      message =
-        "Duplicate resource detected";
-    }
-
-    // JWT errors
-    if (
-      err.name ===
-      "JsonWebTokenError" ||
-      err.name ===
-      "TokenExpiredError"
-    ) {
-      statusCode = 401;
-
-      message =
-        "Invalid or expired token";
-    }
-
-    // CORS errors
-    if (
-      err.message?.includes(
-        "CORS"
-      )
-    ) {
-      statusCode = 403;
-    }
-
-    console.error(
-      `❌ ${statusCode} - ${message}`
-    );
-
-    if (statusCode >= 500) {
-      console.error(err.stack);
-    }
-
-    return res
-      .status(statusCode)
-      .json({
-        success: false,
-
-        message:
-          process.env.NODE_ENV ===
-            "production" &&
-            statusCode >= 500
-            ? "Internal Server Error"
-            : message,
-      });
+  if (err.name === "ValidationError") {
+    statusCode = 400;
+    message = Object.values(err.errors)
+      .map((val) => val.message)
+      .join(", ");
   }
-);
+
+  if (err.code === 11000) {
+    console.error("Duplicate key error details:", err);
+    statusCode = 409;
+    message = "User already exists with this email";
+  }
+
+  if (err.name === "JsonWebTokenError" || err.name === "TokenExpiredError") {
+    statusCode = 401;
+    message = "Invalid or expired token";
+  }
+
+  if (err.message?.startsWith("Not allowed by CORS")) {
+    statusCode = 403;
+    message = err.message;
+  }
+
+  console.error(`❌ Error [${statusCode}]: ${message}`);
+
+  if (statusCode >= 500) {
+    console.error(err.stack);
+  }
+
+  return res.status(statusCode).json({
+    success: false,
+    data: null,
+    message:
+      process.env.NODE_ENV === "production" && statusCode === 500
+        ? "Internal Server Error"
+        : message,
+  });
+});
 
 export default app;
