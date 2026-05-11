@@ -33,12 +33,15 @@ export const apiKeyAuth = async (
       apiKey.trim();
 
     // ================= FIND USER =================
+    console.log("DEBUG: apiKeyAuth - Finding user for key:", cleanApiKey.substring(0, 8) + "...");
     const user =
       await User.findOne({
         apiKey: cleanApiKey,
       }).select(
         "_id email username apiKey role"
       );
+
+    console.log("DEBUG: apiKeyAuth - User found:", user ? user.email : "NONE");
 
     // ================= INVALID KEY =================
     if (!user) {
@@ -52,6 +55,7 @@ export const apiKeyAuth = async (
     // ================= ATTACH USER =================
     req.systemUser = user;
 
+    console.log("DEBUG: apiKeyAuth - Success, calling next()");
     next();
   } catch (error) {
     console.error(

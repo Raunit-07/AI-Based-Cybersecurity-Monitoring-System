@@ -153,6 +153,13 @@ app.use((req, res, next) => {
   }
 });
 
+app.use((req, res, next) => {
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] DEBUG: Global Request - ${req.method} ${req.originalUrl}`);
+  console.log(`[${timestamp}] DEBUG: Headers - x-api-key: ${req.headers["x-api-key"] ? "PRESENT" : "MISSING"}`);
+  next();
+});
+
 /**
  * ================= COMPRESSION =================
  */

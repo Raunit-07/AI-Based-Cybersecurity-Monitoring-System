@@ -5,8 +5,10 @@ import { validationResult } from "express-validator";
  */
 const validate = (req, res, next) => {
   const errors = validationResult(req);
+  console.log("DEBUG: Validate middleware triggered");
 
   if (!errors.isEmpty()) {
+    console.log("DEBUG: Validation errors found:", JSON.stringify(errors.array(), null, 2));
     const formattedErrors = errors.array().map((err) => ({
       field: err.path || err.param || "unknown",
       message: err.msg,

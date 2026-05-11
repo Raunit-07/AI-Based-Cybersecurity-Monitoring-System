@@ -130,7 +130,7 @@ const createAlert = async (
       await Alert.create({
         user: userId,
 
-        ip,
+        ip:alertData.ip,
 
         anomalyScore,
 

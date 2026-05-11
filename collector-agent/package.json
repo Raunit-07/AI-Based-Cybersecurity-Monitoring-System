@@ -1,0 +1,24 @@
+{
+  "name": "collector-agent",
+  "version": "1.0.0",
+  "description": "ThreatOps realtime log collector agent",
+  "type": "module",
+  "main": "agent.js",
+  "scripts": {
+    "start": "node agent.js"
+  },
+  "keywords": [
+    "cybersecurity",
+    "threat-detection",
+    "log-ingestion",
+    "collector-agent"
+  ],
+  "author": "Raunit",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.16.0",
+    "chokidar": "^5.0.0",
+    "dotenv": "^17.4.2",
+    "winston": "^3.19.0"
+  }
+}
