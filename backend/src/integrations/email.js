@@ -1,19 +1,14 @@
 import { Resend } from "resend";
 
-// ================= ENV =================
-const RESEND_API_KEY =
-  process.env.RESEND_API_KEY?.trim();
-
-const ALERT_EMAIL =
-  process.env.ALERT_EMAIL?.trim();
-
 // ================= INIT =================
 let resend = null;
 
 // ================= CREATE CLIENT =================
 const initializeResend = () => {
   try {
-    if (!RESEND_API_KEY) {
+    const apiKey = process.env.RESEND_API_KEY?.trim();
+    
+    if (!apiKey) {
       console.warn(
         "⚠️ RESEND_API_KEY missing"
       );
@@ -26,7 +21,7 @@ const initializeResend = () => {
     }
 
     resend = new Resend(
-      RESEND_API_KEY
+      apiKey
     );
 
     return resend;
@@ -48,10 +43,6 @@ export const verifyEmailService =
         initializeResend();
 
       if (!client) {
-        console.warn(
-          "⚠️ Email service unavailable"
-        );
-
         return;
       }
 
@@ -84,7 +75,7 @@ export const sendEmailAlert =
       // ================= RECEIVER =================
       const receiver =
         alert.recipientEmail ||
-        ALERT_EMAIL;
+        process.env.ALERT_EMAIL?.trim();
 
       if (!receiver) {
         console.warn(
