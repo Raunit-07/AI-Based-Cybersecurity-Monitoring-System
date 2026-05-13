@@ -30,17 +30,40 @@ logger.info(
 
 /**
  * ==================================================
- * VALIDATE LOG FILE
+ * VALIDATE CONFIG
  * ==================================================
  */
+if (!config.apiKey) {
+  logger.error("❌ MISSING API KEY!");
+  console.log("\n==================================================");
+  console.log("To run the agent, please provide your API key:");
+  console.log("USAGE: node agent.js <YOUR_API_KEY> [OPTIONAL_LOG_PATH]");
+  console.log("EXAMPLE: node agent.js e485f7... C:/nginx/logs/access.log");
+  console.log("OR: Set LOG_API_KEY in your .env file");
+  console.log("==================================================\n");
+  process.exit(1);
+}
+
+if (!config.backendUrl) {
+  logger.error("❌ MISSING BACKEND URL!");
+  process.exit(1);
+}
+
 if (!fs.existsSync(config.logFilePath)) {
   logger.error(
     `❌ Log file not found: ${config.logFilePath}`
   );
+  console.log("Please ensure the path is correct in your .env file.");
 
   process.exit(1);
 }
 
+logger.info(
+  `🔑 API Key Loaded: ${config.apiKey.substring(0, 8)}...`
+);
+logger.info(
+  `🌐 Backend URL: ${config.backendUrl}`
+);
 logger.info(
   `📂 Watching log file: ${config.logFilePath}`
 );

@@ -15,6 +15,10 @@ import {
 
 const router = express.Router();
 
+import {
+    deviceAuth,
+} from "../middlewares/deviceAuth.middleware.js";
+
 /**
  * ==================================================
  * CREATE LOGS
@@ -23,7 +27,7 @@ const router = express.Router();
 router.post(
     "/",
 
-    apiKeyAuth,
+    deviceAuth,
 
     async (req, res, next) => {
         console.log("DEBUG: POST /api/logs hit");

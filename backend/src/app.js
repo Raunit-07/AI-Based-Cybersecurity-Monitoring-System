@@ -8,6 +8,7 @@ import compression from "compression";
 import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
 import alertRoutes from "./routes/alerts.routes.js";
+import devicesRoutes from "./routes/device.routes.js";
 import alertsController from "./controllers/alerts.controller.js";
 
 import { authMiddleware } from "./middlewares/auth.middleware.js";
@@ -30,6 +31,7 @@ app.use(
     },
   })
 );
+
 
 /**
  * ================= CORS =================
@@ -209,6 +211,10 @@ app.get("/api/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/logs", logsRoutes);
 app.use("/api/alerts", alertRoutes);
+app.use(
+  "/api/devices",
+  devicesRoutes
+);
 
 app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 

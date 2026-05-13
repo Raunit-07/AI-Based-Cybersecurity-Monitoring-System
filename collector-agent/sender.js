@@ -1,8 +1,18 @@
 import axios from "axios";
 
-import config from "./config.js";
+import os from "os";
+
+import config, {
+  generateDeviceId,
+} from "./config.js";
+
 import logger from "./logger.js";
 
+/**
+ * ==================================================
+ * AXIOS CLIENT
+ * ==================================================
+ */
 const api = axios.create({
   baseURL: config.backendUrl,
 
@@ -14,85 +24,254 @@ const api = axios.create({
 
     "x-api-key":
       config.apiKey,
+
+    "x-device-id":
+      config.deviceId,
+
+    "x-device-key":
+      config.deviceKey,
   },
 });
+
+/**
+ * ==================================================
+ * REGISTER DEVICE
+ * ==================================================
+ */
+export const registerDevice =
+  async (token) => {
+    try {
+      const deviceId =
+        generateDeviceId();
+
+      const response =
+        await api.post(
+          "/api/devices/register",
+
+          {
+            deviceId,
+
+            hostname:
+              os.hostname(),
+
+            os:
+              os.platform(),
+
+            architecture:
+              os.arch(),
+
+            agentVersion:
+              config.agentVersion,
+          },
+
+          {
+            headers: {
+              Authorization:
+                `Bearer ${token}`,
+            },
+          }
+        );
+
+      logger.info(
+        `✅ Device registered: ${deviceId}`
+      );
+
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data
+          ?.message ||
+        error.message;
+
+      logger.error(
+        `❌ Device registration failed: ${errorMsg}`
+      );
+
+      if (
+        error.response?.data
+      ) {
+        console.dir(
+          error.response.data,
+          {
+            depth: null,
+          }
+        );
+      }
+
+      throw new Error(
+        errorMsg
+      );
+    }
+  };
 
 /**
  * ==================================================
  * SEND LOGS
  * ==================================================
  */
-export const sendLogs = async (
-  logs
-) => {
-  try {
-    if (
-      !logs ||
-      !Array.isArray(logs) ||
-      !logs.length
-    ) {
-      return;
-    }
+export const sendLogs =
+  async (logs) => {
+    try {
+      // ================= VALIDATION =================
+      if (
+        !logs ||
+        !Array.isArray(logs) ||
+        !logs.length
+      ) {
+        return;
+      }
 
-    /**
-     * Clean payload
-     */
-    const payload = {
-      logs: logs.map((log) => ({
-        ip: log.ip,
+      /**
+       * ================= CLEAN PAYLOAD =================
+       */
+      const payload = {
+        // ✅ Device metadata
+        device: {
+          deviceId:
+            config.deviceId,
 
-        requests:
-          Number(log.requests) || 1,
+          hostname:
+            config.hostname,
 
-        endpoint:
-          log.endpoint || "/",
+          platform:
+            config.platform,
 
-        method:
-          log.method || "GET",
+          architecture:
+            config.architecture,
 
-        user_agent:
-          log.user_agent ||
-          "Unknown",
+          agentVersion:
+            config.agentVersion,
+        },
 
-        timestamp:
-          log.timestamp,
+        // ✅ Logs
+        logs: logs.map(
+          (log) => ({
+            ip: log.ip,
 
-        statusCode:
-          log.statusCode || 200,
+            requests:
+              Number(
+                log.requests
+              ) || 1,
 
-        bytes:
-          log.bytes || 0,
-      })),
-    };
+            endpoint:
+              log.endpoint ||
+              "/",
 
-    console.log(
-      "📦 PAYLOAD:"
-    );
+            method:
+              log.method ||
+              "GET",
 
-    console.dir(payload, {
-      depth: null,
-    });
+            user_agent:
+              log.user_agent ||
+              "Unknown",
 
-    /**
-     * Send to backend
-     */
-    const response =
-      await api.post(
-        "/api/logs",
-        payload
+            timestamp:
+              log.timestamp,
+
+            statusCode:
+              log.statusCode ||
+              200,
+
+            bytes:
+              log.bytes || 0,
+          })
+        ),
+      };
+
+      // ================= DEBUG =================
+      if (
+        config.environment !==
+        "production"
+      ) {
+        console.log(
+          "📦 PAYLOAD:"
+        );
+
+        console.dir(
+          payload,
+          {
+            depth: null,
+          }
+        );
+      }
+
+      /**
+       * ================= SEND TO BACKEND =================
+       */
+      const response =
+        await api.post(
+          "/api/logs",
+          payload
+        );
+
+      logger.info(
+        `✅ Sent ${logs.length} logs`
       );
 
-    return response.data;
-  } catch (error) {
-    const errorMsg = error.response?.data?.message || error.message;
-    
-    logger.error(`❌ Failed to send logs: ${errorMsg}`);
-    
-    if (error.response?.data) {
-      console.dir(error.response.data, { depth: null });
-    }
+      return response.data;
+    } catch (error) {
+      const errorMsg =
+        error.response?.data
+          ?.message ||
+        error.message;
 
-    // Rethrow to let the caller know it failed
-    throw new Error(errorMsg);
-  }
-};
+      logger.error(
+        `❌ Failed to send logs: ${errorMsg}`
+      );
+
+      if (
+        error.response?.data
+      ) {
+        console.dir(
+          error.response.data,
+          {
+            depth: null,
+          }
+        );
+      }
+
+      // Rethrow
+      throw new Error(
+        errorMsg
+      );
+    }
+  };
+
+/**
+ * ==================================================
+ * HEARTBEAT
+ * ==================================================
+ */
+export const sendHeartbeat =
+  async () => {
+    try {
+      await api.post(
+        "/api/devices/heartbeat",
+
+        {
+          deviceId:
+            config.deviceId,
+
+          hostname:
+            config.hostname,
+
+          platform:
+            config.platform,
+
+          timestamp:
+            new Date().toISOString(),
+        }
+      );
+
+      logger.info(
+        "💓 Heartbeat sent"
+      );
+    } catch (error) {
+      logger.error(
+        `❌ Heartbeat failed: ${error.response?.data
+          ?.message ||
+        error.message
+        }`
+      );
+    }
+  };
