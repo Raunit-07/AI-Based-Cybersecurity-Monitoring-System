@@ -124,13 +124,36 @@ const createAlert = async (
             : "low");
 
     /**
+ * ================= DEVICE INFO =================
+ */
+    const deviceId =
+      alertData.deviceId || null;
+
+    /**
      * ================= CREATE ALERT =================
      */
     const alert =
       await Alert.create({
+        /**
+         * ============================================
+         * TENANT
+         * ============================================
+         */
         user: userId,
 
-        ip:alertData.ip,
+        /**
+         * ============================================
+         * DEVICE
+         * ============================================
+         */
+        deviceId,
+
+        /**
+         * ============================================
+         * NETWORK
+         * ============================================
+         */
+        ip,
 
         anomalyScore,
 
@@ -182,6 +205,9 @@ const createAlert = async (
         user: userId,
 
         ip: alert.ip,
+
+        deviceId:
+          alert.deviceId,
 
         attackType:
           alert.attackType,

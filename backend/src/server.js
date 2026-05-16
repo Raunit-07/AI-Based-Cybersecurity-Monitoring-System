@@ -197,6 +197,8 @@ io.on("connection", (socket) => {
  */
 app.set("io", io);
 
+global.io = io;
+
 /**
  * ================= SERVER INSTANCE =================
  */

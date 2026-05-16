@@ -6,38 +6,46 @@ import {
 } from "../controllers/logs.controller.js";
 
 import {
-    apiKeyAuth,
-} from "../middlewares/apiKeyAuth.js";
-
-import {
     authMiddleware,
 } from "../middlewares/auth.middleware.js";
 
-const router = express.Router();
-
 import {
-    deviceAuth,
+    deviceAuthMiddleware,
 } from "../middlewares/deviceAuth.middleware.js";
+
+const router = express.Router();
 
 /**
  * ==================================================
- * CREATE LOGS
+ * CREATE LOGS / TELEMETRY INGESTION
+ * ==================================================
+ *
+ * Protected using:
+ * - x-device-id
+ * - x-device-key
+ *
+ * Only registered endpoint agents
+ * can send telemetry/logs.
+ *
+ * Future-ready for:
+ * - endpoint monitoring
+ * - EDR architecture
+ * - multi-device telemetry
+ * - SOC pipelines
  * ==================================================
  */
 router.post(
     "/",
 
-    deviceAuth,
+    deviceAuthMiddleware,
 
     async (req, res, next) => {
-        console.log("DEBUG: POST /api/logs hit");
-        console.log("DEBUG: Body:", JSON.stringify(req.body, null, 2));
         try {
 
             /**
-             * ============================================
+             * ==================================================
              * NORMALIZE PAYLOAD
-             * ============================================
+             * ==================================================
              */
             const logs =
                 Array.isArray(req.body.logs)
@@ -45,28 +53,37 @@ router.post(
                     : [req.body];
 
             /**
+             * ==================================================
              * EMPTY CHECK
+             * ==================================================
              */
             if (!logs.length) {
                 return res.status(400).json({
                     success: false,
-                    message: "No logs provided",
+
+                    data: null,
+
+                    message:
+                        "No logs provided",
                 });
             }
 
             /**
-             * ============================================
-             * BASIC NORMALIZATION
-             * ============================================
+             * ==================================================
+             * VALIDATE + NORMALIZE EACH LOG
+             * ==================================================
              */
             for (const log of logs) {
 
                 /**
-                 * REQUIRED FIELDS
+                 * ================= REQUIRED =================
                  */
                 if (!log.ip) {
                     return res.status(400).json({
                         success: false,
+
+                        data: null,
+
                         message:
                             "Valid IP address is required",
                     });
@@ -75,6 +92,9 @@ router.post(
                 if (!log.endpoint) {
                     return res.status(400).json({
                         success: false,
+
+                        data: null,
+
                         message:
                             "Endpoint is required",
                     });
@@ -83,13 +103,18 @@ router.post(
                 if (!log.method) {
                     return res.status(400).json({
                         success: false,
+
+                        data: null,
+
                         message:
-                            "HTTP Method is required",
+                            "HTTP method is required",
                     });
                 }
 
                 /**
-                 * DEFAULT VALUES
+                 * ==================================================
+                 * NORMALIZATION
+                 * ==================================================
                  */
                 log.requests =
                     Number(log.requests || 1);
@@ -100,24 +125,57 @@ router.post(
                 log.bytes =
                     Number(log.bytes || 0);
 
+                log.failedLogins =
+                    Number(
+                        log.failedLogins || 0
+                    );
+
                 log.timestamp =
                     log.timestamp ||
                     new Date().toISOString();
 
                 /**
-                 * OPTIONAL FIELDS
+                 * ==================================================
+                 * SAFE OPTIONALS
+                 * ==================================================
                  */
                 log.user_agent =
-                    log.user_agent || "Unknown";
+                    String(
+                        log.user_agent ||
+                        "Unknown"
+                    );
 
                 log.referrer =
-                    log.referrer || "-";
+                    String(
+                        log.referrer || "-"
+                    );
+
+                /**
+                 * ==================================================
+                 * ATTACH DEVICE CONTEXT
+                 * ==================================================
+                 *
+                 * Critical for:
+                 * - multi-device support
+                 * - telemetry ownership
+                 * - future SaaS isolation
+                 * ==================================================
+                 */
+                log.deviceId =
+                    req.device.deviceId;
+
+                log.userId =
+                    req.device.userId;
+
+                log.organizationId =
+                    req.device.organizationId ||
+                    null;
             }
 
             /**
-             * ============================================
-             * ATTACH NORMALIZED LOGS
-             * ============================================
+             * ==================================================
+             * ATTACH TO REQUEST
+             * ==================================================
              */
             req.logs = logs;
 
@@ -125,9 +183,18 @@ router.post(
 
         } catch (error) {
 
+            console.error(
+                "❌ Log normalization error:",
+                error.message
+            );
+
             return res.status(500).json({
                 success: false,
-                message: error.message,
+
+                data: null,
+
+                message:
+                    "Log ingestion failed",
             });
         }
     },
@@ -139,11 +206,19 @@ router.post(
  * ==================================================
  * GET LOGS
  * ==================================================
+ *
+ * Protected dashboard route.
+ *
+ * Future:
+ * - tenant filtering
+ * - organization isolation
+ * - RBAC
+ * ==================================================
  */
 router.get(
     "/",
 
-    authMiddleware,
+    deviceAuthMiddleware,
 
     getLogs
 );

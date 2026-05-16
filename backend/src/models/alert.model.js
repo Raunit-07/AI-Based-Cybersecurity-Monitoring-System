@@ -27,6 +27,16 @@ const alertSchema = new mongoose.Schema(
       index: true,
     },
 
+
+    /**
+ * ================= DEVICE =================
+ */
+    deviceId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
     /**
      * ================= SOURCE IP =================
      */

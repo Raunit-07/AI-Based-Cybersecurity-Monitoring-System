@@ -16,20 +16,34 @@ import logger from "./logger.js";
 const api = axios.create({
   baseURL: config.backendUrl,
 
-  timeout: 10000,
+  timeout: 15000,
 
   headers: {
-    "Content-Type":
-      "application/json",
+    "Content-Type": "application/json",
 
-    "x-api-key":
-      config.apiKey,
+    /**
+     * ==========================================
+     * DEVICE AUTHENTICATION
+     * ==========================================
+     */
+    "x-api-key": config.apiKey || "",
 
     "x-device-id":
-      config.deviceId,
+      config.deviceId || "",
 
     "x-device-key":
-      config.deviceKey,
+      config.deviceKey || "",
+
+    /**
+     * ==========================================
+     * AGENT META
+     * ==========================================
+     */
+    "x-agent-version":
+      config.agentVersion || "1.0.0",
+
+    "x-agent-platform":
+      config.platform || os.platform(),
   },
 });
 
