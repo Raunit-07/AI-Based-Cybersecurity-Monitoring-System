@@ -1,376 +1,426 @@
-import crypto from "crypto";
-
 import Device from "../models/device.model.js";
 
+import catchAsync from "../utils/catchAsync.js";
+import apiResponse from "../utils/apiResponse.js";
+
+import {
+    emitDeviceOnline
+} from "../services/realtime.service.js";
+
+
 /**
- * ==================================================
- * REGISTER DEVICE
- * ==================================================
- * Real endpoint registration flow:
- *
- * 1. Agent connects
- * 2. If device exists:
- *    - update heartbeat
- *    - set online
- *    - return existing apiKey
- *
- * 3. Else:
- *    - create new device
- *    - generate apiKey
- *
- * Production-safe:
- * - reconnect support
- * - multi-user ready
- * - telemetry ready
- * ==================================================
+ * ============================================
+ * GET OWNER ID
+ * ============================================
  */
-export const registerDevice = async (req, res) => {
-    try {
-        const {
-            deviceId,
-            hostname,
-            os,
-            agentVersion,
-            localIp,
-            metadata,
-        } = req.body;
+const getOwnerId = (req) => {
 
-        /**
-         * ================= VALIDATION =================
-         */
-        if (
-            !deviceId ||
-            !hostname ||
-            !os
-        ) {
-            return res.status(400).json({
-                success: false,
+    return (
 
-                data: null,
+        req.user?._id ||
 
-                message:
-                    "Missing required fields",
-            });
-        }
+        req.device?.userId ||
 
-        /**
-         * ================= FIND EXISTING DEVICE =================
-         */
-        const existingDevice =
-            await Device.findOne({
+        null
+
+    );
+
+};
+
+
+
+/**
+ * ============================================
+ * REGISTER DEVICE
+ * ============================================
+ */
+export const registerDevice =
+    catchAsync(
+        async (
+            req,
+            res
+        ) => {
+
+            const {
+
                 deviceId,
-            }).select("+apiKey");
+                hostname,
+                os,
+                agentVersion,
+                localIp,
+                metadata
 
-        /**
-         * ==================================================
-         * DEVICE RECONNECT FLOW
-         * ==================================================
-         * Real agents reconnect frequently.
-         * Never reject reconnects.
-         * ==================================================
-         */
-        if (existingDevice) {
-            existingDevice.lastSeen =
-                new Date();
+            } = req.body;
 
-            existingDevice.heartbeatAt =
-                new Date();
 
-            existingDevice.status =
-                "online";
+            const ownerId =
+                getOwnerId(req);
 
-            existingDevice.hostname =
-                hostname;
 
-            existingDevice.os =
-                os;
+            if (
+                !ownerId
+            ) {
 
-            existingDevice.agentVersion =
-                agentVersion ||
-                existingDevice.agentVersion;
+                return apiResponse(
 
-            existingDevice.localIp =
-                localIp ||
-                existingDevice.localIp;
+                    res,
+                    401,
+                    false,
+                    null,
+                    "Unauthorized"
 
-            existingDevice.ipAddress =
-                req.ip;
+                );
 
-            existingDevice.metadata = {
-                ...existingDevice.metadata,
-                ...(metadata || {}),
-            };
+            }
 
-            await existingDevice.save();
+
+            if (
+                !deviceId ||
+                !hostname ||
+                !os
+            ) {
+
+                return apiResponse(
+
+                    res,
+                    400,
+                    false,
+                    null,
+                    "Missing required fields"
+
+                );
+
+            }
+
 
             /**
- * ==========================================
- * REALTIME SOCKET EVENT
- * ==========================================
- */
-            if (req.io) {
-                req.io.emit(
-                    "device_online",
+             * Prevent cross-user device collisions
+             */
+            const existingDevice =
+                await Device.findOne({
+
+                    deviceId,
+
+                    userId:
+                        ownerId
+
+                })
+                    .select(
+                        "+apiKey"
+                    );
+
+
+
+            if (
+                existingDevice
+            ) {
+
+                const now =
+                    new Date();
+
+
+                existingDevice.lastSeen =
+                    now;
+
+                existingDevice.heartbeatAt =
+                    now;
+
+                existingDevice.status =
+                    "online";
+
+                existingDevice.hostname =
+                    hostname;
+
+                existingDevice.os =
+                    os;
+
+                existingDevice.agentVersion =
+
+                    agentVersion ||
+
+                    existingDevice.agentVersion;
+
+
+                existingDevice.localIp =
+
+                    localIp ||
+
+                    existingDevice.localIp;
+
+
+                existingDevice.ipAddress =
+                    req.ip;
+
+
+                existingDevice.metadata = {
+
+                    ...existingDevice.metadata,
+
+                    ...(metadata || {})
+
+                };
+
+
+                await existingDevice.save();
+
+
+                emitDeviceOnline(
+
+                    req.io,
+
+                    existingDevice,
+
+                    ownerId
+
+                );
+
+
+                return apiResponse(
+
+                    res,
+                    200,
+                    true,
 
                     {
+
                         deviceId:
                             existingDevice.deviceId,
 
-                        hostname:
-                            existingDevice.hostname,
+                        apiKey:
+                            existingDevice.apiKey,
 
                         status:
                             existingDevice.status,
 
-                        os:
-                            existingDevice.os,
+                        reconnect: true
 
-                        lastSeen:
-                            existingDevice.lastSeen,
-                    }
+                    },
+
+                    "Device reconnected successfully"
+
                 );
+
             }
 
-            return res.status(200).json({
-                success: true,
 
-                data: {
-                    deviceId:
-                        existingDevice.deviceId,
+            /**
+             * API key auto-generated
+             * by schema middleware
+             */
+            const now =
+                new Date();
 
-                    apiKey:
-                        existingDevice.apiKey,
+
+            const device =
+                await Device.create({
+
+                    deviceId,
+
+                    hostname,
+
+                    os,
+
+                    userId:
+                        ownerId,
+
+                    agentVersion:
+                        agentVersion ||
+                        "1.0.0",
 
                     status:
-                        existingDevice.status,
+                        "online",
 
-                    reconnect: true,
-                },
+                    lastSeen:
+                        now,
 
-                message:
-                    "Device reconnected successfully",
-            });
-        }
+                    heartbeatAt:
+                        now,
 
-        /**
-         * ================= GENERATE API KEY =================
-         */
-        const apiKey =
-            crypto
-                .randomBytes(32)
-                .toString("hex");
+                    ipAddress:
+                        req.ip,
 
-        /**
-         * ================= CREATE DEVICE =================
-         */
-        const device =
-            await Device.create({
-                deviceId,
+                    localIp:
+                        localIp || "",
 
-                hostname,
+                    metadata: {
 
-                os,
+                        architecture:
+                            metadata?.architecture || "",
 
-                agentVersion:
-                    agentVersion || "1.0.0",
+                        platform:
+                            metadata?.platform || "",
 
-                userId:
-                    req.user._id,
+                        cpuUsage:
+                            metadata?.cpuUsage || 0,
 
-                apiKey,
+                        memoryUsage:
+                            metadata?.memoryUsage || 0
 
-                status: "online",
+                    }
 
-                lastSeen:
-                    new Date(),
+                });
 
-                heartbeatAt:
-                    new Date(),
 
-                ipAddress:
-                    req.ip,
+            emitDeviceOnline(
 
-                localIp:
-                    localIp || "",
+                req.io,
 
-                metadata: {
-                    architecture:
-                        metadata?.architecture ||
-                        "",
+                device,
 
-                    platform:
-                        metadata?.platform ||
-                        "",
+                ownerId
 
-                    cpuUsage:
-                        metadata?.cpuUsage || 0,
+            );
 
-                    memoryUsage:
-                        metadata?.memoryUsage || 0,
-                },
-            });
 
-        /**
-* ==========================================
-* REALTIME SOCKET EVENT
-* ==========================================
-*/
-        if (req.io) {
-            req.io.emit(
-                "device_online",
+            return apiResponse(
+
+                res,
+                201,
+                true,
 
                 {
+
                     deviceId:
                         device.deviceId,
 
-                    hostname:
-                        device.hostname,
+                    apiKey:
+                        device.apiKey,
 
                     status:
                         device.status,
 
-                    os:
-                        device.os,
+                    reconnect: false
 
-                    lastSeen:
-                        device.lastSeen,
-                }
+                },
+
+                "Device registered successfully"
+
             );
+
         }
+    );
 
 
-
-        /**
-         * ================= SUCCESS =================
-         */
-        return res.status(201).json({
-            success: true,
-
-            data: {
-                deviceId:
-                    device.deviceId,
-
-                apiKey:
-                    apiKey,
-
-                status:
-                    device.status,
-
-                reconnect: false,
-            },
-
-            message:
-                "Device registered successfully",
-        });
-
-    } catch (error) {
-        console.error(
-            "❌ Device registration error:",
-            error
-        );
-
-        return res.status(500).json({
-            success: false,
-
-            data: null,
-
-            message:
-                "Device registration failed",
-        });
-    }
-};
 
 /**
- * ==================================================
- * DEVICE HEARTBEAT
- * ==================================================
- * Updates:
- * - online status
- * - heartbeat
- * - lastSeen
- *
- * Used by:
- * collector-agent
- * endpoint daemon
- * ==================================================
+ * ============================================
+ * HEARTBEAT
+ * ============================================
  */
 export const heartbeatDevice =
-    async (req, res) => {
-        try {
+    catchAsync(
+        async (
+            req,
+            res
+        ) => {
+
             const {
-                deviceId,
+
+                deviceId
+
             } = req.body;
 
-            if (!deviceId) {
-                return res.status(400).json({
-                    success: false,
 
-                    data: null,
+            const ownerId =
+                getOwnerId(req);
 
-                    message:
-                        "Device ID required",
-                });
+
+            if (
+                !ownerId
+            ) {
+
+                return apiResponse(
+
+                    res,
+                    401,
+                    false,
+                    null,
+                    "Unauthorized"
+
+                );
+
             }
+
+
+            if (
+                !deviceId
+            ) {
+
+                return apiResponse(
+
+                    res,
+                    400,
+                    false,
+                    null,
+                    "Device ID required"
+
+                );
+
+            }
+
 
             const device =
                 await Device.findOne({
+
                     deviceId,
+
+                    userId:
+                        ownerId
+
                 });
 
-            if (!device) {
-                return res.status(404).json({
-                    success: false,
 
-                    data: null,
+            if (
+                !device
+            ) {
 
-                    message:
-                        "Device not found",
-                });
+                return apiResponse(
+
+                    res,
+                    404,
+                    false,
+                    null,
+                    "Device not found"
+
+                );
+
             }
+
+
+            const now =
+                new Date();
 
             device.status =
                 "online";
 
             device.lastSeen =
-                new Date();
+                now;
 
             device.heartbeatAt =
-                new Date();
+                now;
 
             await device.save();
 
-            /**
- * ==========================================
- * REALTIME SOCKET EVENT
- * ==========================================
- */
-            if (req.io) {
-                req.io.emit(
-                    "device_online",
 
-                    {
-                        deviceId:
-                            device.deviceId,
+            emitDeviceOnline(
 
-                        hostname:
-                            device.hostname,
+                req.io,
 
-                        status:
-                            device.status,
+                device,
 
-                        os:
-                            device.os,
+                ownerId
 
-                        lastSeen:
-                            device.lastSeen,
-                    }
-                );
-            }
+            );
 
-            return res.status(200).json({
-                success: true,
 
-                data: {
+            return apiResponse(
+
+                res,
+                200,
+                true,
+
+                {
+
                     deviceId:
                         device.deviceId,
 
@@ -378,159 +428,84 @@ export const heartbeatDevice =
                         device.status,
 
                     heartbeatAt:
-                        device.heartbeatAt,
+                        device.heartbeatAt
+
                 },
 
-                message:
-                    "Heartbeat updated successfully",
-            });
+                "Heartbeat updated"
 
-        } catch (error) {
-            console.error(
-                "❌ Heartbeat error:",
-                error
             );
 
-            return res.status(500).json({
-                success: false,
-
-                data: null,
-
-                message:
-                    "Heartbeat failed",
-            });
         }
-    };
+    );
+
 
 
 /**
-* ==================================================
-* GET USER DEVICES
-* ==================================================
-* Returns ONLY devices
-* owned by logged-in user.
-*
-* Multi-tenant safe.
-* ==================================================
-*/
+ * ============================================
+ * GET DEVICES
+ * ============================================
+ */
 export const getDevices =
-    async (req, res) => {
-        try {
-            /**
-             * ==========================================
-             * AUTH CHECK
-             * ==========================================
-             */
-            if (!req.user?._id) {
-                return res.status(401).json({
-                    success: false,
+    catchAsync(
+        async (
+            req,
+            res
+        ) => {
 
-                    data: null,
+            const ownerId =
+                getOwnerId(req);
 
-                    message:
-                        "Unauthorized",
-                });
+
+            if (
+                !ownerId
+            ) {
+
+                return apiResponse(
+
+                    res,
+                    401,
+                    false,
+                    null,
+                    "Unauthorized"
+
+                );
+
             }
 
-            /**
-             * ==========================================
-             * FETCH DEVICES
-             * ==========================================
-             */
+
             const devices =
                 await Device.find({
+
                     userId:
-                        req.user._id,
+                        ownerId
+
                 })
                     .sort({
-                        updatedAt: -1,
+
+                        updatedAt: -1
+
                     })
                     .select(
                         "-apiKey"
                     );
 
-            /**
-             * ==========================================
-             * ENRICH DEVICE DATA
-             * ==========================================
-             */
-            const formattedDevices =
-                devices.map(
-                    (device) => ({
-                        _id: device._id,
 
-                        deviceId:
-                            device.deviceId,
+            return apiResponse(
 
-                        hostname:
-                            device.hostname,
+                res,
+                200,
+                true,
 
-                        os:
-                            device.os,
+                {
 
-                        status:
-                            device.status,
+                    devices
 
-                        ipAddress:
-                            device.ipAddress,
-
-                        localIp:
-                            device.localIp,
-
-                        lastSeen:
-                            device.lastSeen,
-
-                        heartbeatAt:
-                            device.heartbeatAt,
-
-                        agentVersion:
-                            device.agentVersion,
-
-                        /**
-                         * ======================================
-                         * PLACEHOLDERS FOR FUTURE ANALYTICS
-                         * ======================================
-                         */
-                        threatCount:
-                            device.threatCount ||
-                            0,
-
-                        riskScore:
-                            device.riskScore ||
-                            0,
-                    })
-                );
-
-            /**
-             * ==========================================
-             * RESPONSE
-             * ==========================================
-             */
-            return res.status(200).json({
-                success: true,
-
-                data: {
-                    devices:
-                        formattedDevices,
                 },
 
-                message:
-                    "Devices fetched successfully",
-            });
+                "Devices fetched"
 
-        } catch (error) {
-            console.error(
-                "❌ Get devices error:",
-                error
             );
 
-            return res.status(500).json({
-                success: false,
-
-                data: null,
-
-                message:
-                    "Failed to fetch devices",
-            });
         }
-    };
+    );

@@ -1,366 +1,547 @@
 import mongoose from "mongoose";
-
 import validator from "validator";
 
-/**
- * ================= ALERT SCHEMA =================
- * Enterprise-grade multi-user alert model
- */
 const alertSchema = new mongoose.Schema(
   {
     /**
-     * ================= ALERT OWNER =================
-     * CRITICAL FOR TENANT ISOLATION
+     * ============================================
+     * ALERT OWNER
+     * ============================================
      */
     user: {
-      type: mongoose.Schema.Types.ObjectId,
+
+      type:
+        mongoose.Schema.Types.ObjectId,
 
       ref: "User",
 
-      required: [
-        true,
-        "Alert owner is required",
-      ],
+      required: true,
 
       immutable: true,
 
-      index: true,
+      index: true
     },
 
 
+
     /**
- * ================= DEVICE =================
- */
+     * ============================================
+     * DEVICE
+     * ============================================
+     */
     deviceId: {
+
       type: String,
+
       default: null,
-      index: true,
+
+      index: true
     },
 
+
+
     /**
-     * ================= SOURCE IP =================
+     * ============================================
+     * IP
+     * ============================================
      */
     ip: {
+
       type: String,
 
-      required: [
-        true,
-        "IP address is required",
-      ],
+      required: true,
 
       trim: true,
 
       index: true,
 
       validate: {
+
         validator(value) {
-          return (
-            typeof value === "string" &&
-            validator.isIP(
-              value.trim()
-            )
+
+          return validator.isIP(
+            value.trim()
           );
+
         },
 
         message:
-          "Invalid IP address format",
-      },
+          "Invalid IP"
+
+      }
+
     },
 
+
+
     /**
-     * ================= ML SCORE =================
+     * ============================================
+     * ANOMALY SCORE
+     *
+     * STANDARDIZED:
+     * 0 = normal
+     * 1 = critical
+     * ============================================
      */
     anomalyScore: {
+
       type: Number,
 
       required: true,
 
-      min: -1,
+      min: 0,
 
       max: 1,
 
-      default: 0,
+      default: 0
     },
 
+
+
     /**
-     * ================= ATTACK TYPE =================
+     * ============================================
+     * THREAT SCORE
+     * ============================================
+     */
+    threatScore: {
+
+      type: Number,
+
+      default: 0,
+
+      index: true
+    },
+
+
+
+    /**
+     * ============================================
+     * ATTACK TYPE
+     * ============================================
      */
     attackType: {
+
       type: String,
 
       enum: [
+
         "DDoS",
+
         "Brute Force",
+
         "Port Scan",
+
         "SQL Injection",
+
         "XSS",
+
         "Malware",
+
         "Suspicious",
-        "Normal",
+
+        "Normal"
+
       ],
 
-      default: "Suspicious",
+      default:
+        "Suspicious",
 
-      trim: true,
+      index: true
 
-      index: true,
     },
 
+
+
     /**
-     * ================= INTERNAL TYPE =================
+     * ============================================
+     * INTERNAL TYPE
+     * ============================================
      */
     type: {
+
       type: String,
 
       enum: [
+
         "ddos",
+
         "bruteforce",
+
         "scan",
+
         "sqli",
+
         "xss",
+
         "malware",
+
         "suspicious",
+
         "normal",
-        "unknown",
+
+        "unknown"
+
       ],
 
-      default: "unknown",
+      default:
+        "unknown",
 
-      lowercase: true,
+      index: true
 
-      trim: true,
-
-      index: true,
     },
 
+
+
     /**
-     * ================= SEVERITY =================
+     * ============================================
+     * SEVERITY
+     * ============================================
      */
     severity: {
+
       type: String,
 
       enum: [
+
         "low",
+
         "medium",
+
         "high",
-        "critical",
+
+        "critical"
+
       ],
 
       default: "medium",
 
-      required: true,
+      index: true
 
-      lowercase: true,
-
-      trim: true,
-
-      index: true,
     },
 
+
+
     /**
-     * ================= HUMAN MESSAGE =================
+     * ============================================
+     * MESSAGE
+     * ============================================
      */
     message: {
+
       type: String,
 
       trim: true,
 
       maxlength: 500,
 
-      default: "Threat detected",
+      default:
+        "Threat detected"
+
     },
 
-    /**
-     * ================= RAW LOG =================
-     */
-    rawLog: {
-      type: String,
 
-      trim: true,
-
-      maxlength: 5000,
-
-      default: "",
-    },
 
     /**
-     * ================= STATUS =================
+     * ============================================
+     * STATUS
+     * ============================================
      */
     status: {
+
       type: String,
 
       enum: [
+
         "active",
+
         "investigating",
+
         "resolved",
+
+        "closed"
+
       ],
 
       default: "active",
 
-      lowercase: true,
+      index: true
 
-      trim: true,
-
-      index: true,
     },
 
+
+
     /**
-     * ================= RESOLVED =================
+     * ============================================
+     * ASSIGNED ANALYST
+     * ============================================
+     */
+    assignedTo: {
+
+      type:
+        mongoose.Schema.Types.ObjectId,
+
+      ref: "User",
+
+      default: null
+    },
+
+
+
+    /**
+     * ============================================
+     * NOTES
+     * ============================================
+     */
+    notes: [{
+
+      text: String,
+
+      createdAt: {
+
+        type: Date,
+
+        default: Date.now
+
+      }
+
+    }],
+
+
+
+    /**
+     * ============================================
+     * RESOLUTION
+     * ============================================
      */
     resolved: {
+
       type: Boolean,
 
       default: false,
 
-      index: true,
+      index: true
+
     },
 
+
+
+    resolvedAt: {
+
+      type: Date,
+
+      default: null
+    },
+
+
+
     /**
-     * ================= ALERT SOURCE =================
+     * ============================================
+     * SOURCE
+     * ============================================
      */
     source: {
+
       type: String,
 
-      default: "nginx",
+      default: "nginx"
 
-      trim: true,
-
-      maxlength: 100,
     },
 
+
+
     /**
-     * ================= GEOLOCATION =================
+     * ============================================
+     * GEO
+     * ============================================
      */
     geo: {
+
       country: {
+
         type: String,
 
-        default: "",
+        default: ""
 
-        trim: true,
       },
 
       city: {
+
         type: String,
 
-        default: "",
+        default: ""
 
-        trim: true,
-      },
+      }
+
     },
 
+
+
     /**
-     * ================= EXTRA METADATA =================
+     * ============================================
+     * META
+     * ============================================
      */
     meta: {
+
       requests: {
+
         type: Number,
 
-        min: 0,
+        default: 0
 
-        default: 0,
       },
 
       failedLogins: {
+
         type: Number,
 
-        min: 0,
+        default: 0
 
-        default: 0,
       },
 
       blocked: {
+
         type: Boolean,
 
-        default: false,
-      },
+        default: false
+
+      }
+
     },
 
+
+
     /**
-     * ================= EVENT TIME =================
+     * ============================================
+     * SOFT DELETE
+     * ============================================
      */
+    isDeleted: {
+
+      type: Boolean,
+
+      default: false
+    },
+
+
+
     timestamp: {
+
       type: Date,
 
       default: Date.now,
 
-      index: true,
-    },
-  },
+      index: true
 
+    }
+
+  },
   {
+
     timestamps: true,
 
     versionKey: false,
 
-    strict: true,
+    strict: true
+
   }
 );
 
+
+
 /**
- * ================= PERFORMANCE INDEXES =================
+ * ============================================
+ * INDEXES
+ * ============================================
  */
 
-// Timeline
 alertSchema.index({
+
   user: 1,
-  createdAt: -1,
+
+  createdAt: -1
+
 });
 
-// IP analytics
+
 alertSchema.index({
+
   user: 1,
+
   ip: 1,
-  createdAt: -1,
+
+  createdAt: -1
+
 });
 
-// Severity analytics
+
 alertSchema.index({
+
   user: 1,
+
   severity: 1,
-  createdAt: -1,
+
+  createdAt: -1
+
 });
 
-// Attack analytics
+
 alertSchema.index({
+
   user: 1,
+
   attackType: 1,
-  createdAt: -1,
+
+  createdAt: -1
+
 });
 
-// Status filtering
+
 alertSchema.index({
+
   user: 1,
+
   status: 1,
-  resolved: 1,
+
+  resolved: 1
+
 });
 
-// Fast anomaly dashboards
+
 alertSchema.index({
+
   user: 1,
-  resolved: 1,
-  severity: 1,
-  timestamp: -1,
+
+  threatScore: -1
+
 });
+
+
 
 /**
- * ================= SAFE JSON OUTPUT =================
+ * ============================================
+ * SAFE JSON
+ * ============================================
  */
+
 alertSchema.methods.toJSON =
   function () {
+
     const obj =
       this.toObject();
 
     delete obj.__v;
 
     return obj;
+
   };
 
-/**
- * ================= SAFE MODEL EXPORT =================
- */
+
+
 const Alert =
+
   mongoose.models.Alert ||
+
   mongoose.model(
     "Alert",
     alertSchema

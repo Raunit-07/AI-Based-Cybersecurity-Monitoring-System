@@ -1,165 +1,267 @@
 import Log from "../models/log.model.js";
-
 import { createAlert } from "./alerts.service.js";
-
 import { detectThreat } from "./mlClient.js";
-
 import logger from "../utils/logger.js";
-
 import { emitTrafficUpdate } from "./realtime.service.js";
 
 /**
- * ================= NORMALIZE ATTACK TYPE =================
+ * ============================================
+ * NORMALIZE ATTACK TYPE
+ * ============================================
  */
-const normalizeAttackType = (type) => {
-  if (!type) return "Normal";
+const normalizeAttackType = (type = "") => {
 
-  const t = String(type).toLowerCase().trim();
+  const t = String(type)
+    .toLowerCase()
+    .trim();
 
-  if (t.includes("ddos")) return "DDoS";
+  if (t.includes("ddos"))
+    return "DDoS";
 
-  if (t.includes("brute") || t.includes("force"))
+  if (
+    t.includes("brute") ||
+    t.includes("force")
+  )
     return "Brute Force";
 
-  if (t.includes("scan") || t.includes("port"))
+  if (
+    t.includes("scan") ||
+    t.includes("port")
+  )
     return "Port Scan";
 
-  if (t.includes("sql") || t.includes("inject"))
+  if (
+    t.includes("sql") ||
+    t.includes("inject")
+  )
     return "SQL Injection";
 
-  if (t.includes("xss")) return "XSS";
+  if (t.includes("xss"))
+    return "XSS";
 
-  if (t.includes("malware")) return "Malware";
+  if (
+    t.includes("malware")
+  )
+    return "Malware";
 
-  if (t.includes("suspicious"))
+  if (
+    t.includes("suspicious")
+  )
     return "Suspicious";
 
-  if (t.includes("normal")) return "Normal";
-
-  return "Suspicious";
+  return "Normal";
 };
 
 
-/**
- * ================= ALLOWED ATTACK TYPES =================
- */
-const allowedAttackTypes = [
-  "DDoS",
-
-  "Brute Force",
-
-  "Port Scan",
-
-  "SQL Injection",
-
-  "XSS",
-
-  "Malware",
-
-  "Suspicious",
-
-  "Normal",
-];
 
 /**
- * ================= SANITIZE LOG DATA =================
+ * ============================================
+ * SANITIZE INPUT
+ * ============================================
  */
-const sanitizeLogData = (data) => {
+const sanitizeLogData = (data = {}) => {
+
   return {
-    ip: String(data.ip || "").trim(),
 
-    requests: Math.max(
-      0,
-      Number(data.requests) || 0
-    ),
+    ip:
+      String(
+        data.ip || ""
+      ).trim(),
 
-    failedLogins: Math.max(
-      0,
-      Number(data.failedLogins) || 0
-    ),
+    requests:
+      Math.max(
+        0,
+        Number(
+          data.requests
+        ) || 0
+      ),
 
-    endpoint: String(
-      data.endpoint || "/unknown"
-    ),
+    failedLogins:
+      Math.max(
+        0,
+        Number(
+          data.failedLogins
+        ) || 0
+      ),
 
-    method: String(data.method || "GET"),
+    endpoint:
+      String(
+        data.endpoint ||
+        "/unknown"
+      ),
 
-    timestamp: data.timestamp
-      ? new Date(data.timestamp)
-      : new Date(),
+    method:
+      String(
+        data.method ||
+        "GET"
+      ),
 
-    user_agent: String(
-      data.user_agent || "unknown"
-    ),
+    timestamp:
+      data.timestamp
+        ?
+        new Date(
+          data.timestamp
+        )
+        :
+        new Date(),
+
+    user_agent:
+      String(
+        data.user_agent ||
+        "unknown"
+      )
+
   };
+
 };
 
+
+
 /**
- * ================= DETERMINE SEVERITY =================
+ * ============================================
+ * NORMALIZE SCORE
+ * 0 → NORMAL
+ * 1 → CRITICAL
+ * ============================================
  */
-const getSeverity = (data, prediction) => {
+const normalizeScore = (score) => {
+
+  const value =
+    Math.abs(
+      Number(
+        score
+      ) || 0
+    );
+
+  return Math.min(
+    Math.max(
+      value,
+      0
+    ),
+    1
+  );
+
+};
+
+
+
+/**
+ * ============================================
+ * DETERMINE SEVERITY
+ * ============================================
+ */
+const getSeverity = (
+  data,
+  score,
+  attackType
+) => {
+
   if (
-    prediction.attackType === "ddos" ||
+    attackType === "DDoS" ||
     data.requests > 2000 ||
-    prediction.anomaly_score > 0.8
+    score >= 0.85
   ) {
+
     return "critical";
+
   }
 
   if (
-    prediction.attackType === "bruteforce" ||
+    attackType === "Brute Force" ||
     data.failedLogins > 20 ||
-    prediction.anomaly_score > 0.6
+    score >= 0.65
   ) {
+
     return "high";
+
   }
 
-  if (prediction.anomaly_score > 0.4) {
+  if (
+    score >= 0.40
+  ) {
+
     return "medium";
+
   }
 
   return "low";
+
 };
 
+
+
 /**
- * ================= MAIN PROCESS =================
- * Multi-user SaaS safe
+ * ============================================
+ * MAIN LOG PROCESSING
+ * ============================================
  */
-const processLog = async (
+const processLog =
+  async (
     logData,
     io,
     userId
   ) => {
+
     try {
-      /**
-       * ================= VALIDATION =================
-       */
-      if (!logData || !logData.ip) {
-        throw new Error("Invalid log data");
+
+      if (
+        !logData ||
+        !logData.ip
+      ) {
+
+        throw new Error(
+          "Invalid log data"
+        );
+
       }
 
-      if (!userId) {
+      if (
+        !userId
+      ) {
+
         throw new Error(
-          "Missing userId in processLog"
+          "Missing user ID"
         );
+
       }
+
 
       const cleanData =
-        sanitizeLogData(logData);
+        sanitizeLogData(
+          logData
+        );
+
+
 
       /**
-       * ================= ML DETECTION =================
+       * ============================================
+       * DEFAULT ML RESULT
+       * ============================================
        */
       let prediction = {
+
         is_anomaly: false,
+
         anomaly_score: 0,
-        attackType: "normal",
+
+        attackType: "normal"
+
       };
 
+
+
+      /**
+       * ============================================
+       * ML SERVICE
+       * ============================================
+       */
       try {
+
         const mlResponse =
           await detectThreat({
-            ip: cleanData.ip,
+
+            ip:
+              cleanData.ip,
 
             requests:
               cleanData.requests,
@@ -171,82 +273,132 @@ const processLog = async (
               cleanData.method,
 
             endpoint:
-              cleanData.endpoint,
+              cleanData.endpoint
+
           });
+
 
         prediction =
           mlResponse?.data ||
           mlResponse ||
           prediction;
-      } catch (error) {
+
+      }
+      catch (error) {
+
         logger.error(
-          `❌ ML Error: ${error.message}`
+          `ML error: ${error.message}`
         );
+
       }
 
+
+
       /**
-       * ================= HYBRID DETECTION =================
+       * ============================================
+       * SCORE
+       * ============================================
+       */
+      const anomalyScore =
+        normalizeScore(
+
+          prediction
+            ?.anomaly_score
+
+        );
+
+
+
+      /**
+       * ============================================
+       * HYBRID DETECTION
+       * ============================================
        */
       const isAnomaly =
-        prediction.is_anomaly === true ||
+
+        prediction
+          ?.is_anomaly === true ||
+
+        anomalyScore >= 0.7 ||
+
         cleanData.requests > 800 ||
+
         cleanData.failedLogins > 10;
 
-      const anomalyScore =
-        Number(
-          prediction.anomaly_score
-        ) || 0;
+
 
       /**
-       * ================= DETERMINE ATTACK TYPE =================
+       * ============================================
+       * ATTACK TYPE
+       * ============================================
        */
-      let rawAttackType =
-        "Normal";
+      let attackType =
+        normalizeAttackType(
+          prediction.attackType
+        );
+
+
 
       if (
         cleanData.failedLogins > 10
       ) {
-        rawAttackType =
+
+        attackType =
           "Brute Force";
-      } else if (
-        cleanData.requests > 800
-      ) {
-        rawAttackType = "DDoS";
-      } else if (
-        prediction.attackType &&
-        prediction.attackType !==
-        "normal"
-      ) {
-        rawAttackType =
-          prediction.attackType;
-      } else if (isAnomaly) {
-        rawAttackType =
-          "Suspicious";
+
       }
 
-      const attackType =
-        normalizeAttackType(
-          rawAttackType
-        );
+      else if (
+        cleanData.requests > 800
+      ) {
 
-      const severity =
-        getSeverity(cleanData, {
-          ...prediction,
+        attackType =
+          "DDoS";
 
-          attackType:
-            attackType
-              .toLowerCase()
-              .replace(/\s+/g, ""),
-        });
+      }
+
+      else if (
+        isAnomaly &&
+        attackType === "Normal"
+      ) {
+
+        attackType =
+          "Suspicious";
+
+      }
+
+
 
       /**
-       * ================= SAVE LOG =================
+       * ============================================
+       * SEVERITY
+       * ============================================
+       */
+      const severity =
+        getSeverity(
+
+          cleanData,
+
+          anomalyScore,
+
+          attackType
+
+        );
+
+
+
+      /**
+       * ============================================
+       * SAVE LOG
+       * ============================================
        */
       const log =
         await Log.create({
+
           ...cleanData,
 
-          user: userId,
+          user:
+            userId,
 
           is_anomaly:
             isAnomaly,
@@ -254,43 +406,60 @@ const processLog = async (
           anomaly_score:
             anomalyScore,
 
-          attackType,
+          attackType
+
         });
 
 
-      /**
-  * ================= LIVE TRAFFIC =================
-  * Emit ALL traffic activity
-  */
-      emitTrafficUpdate(io, userId, {
-        requests: cleanData.requests,
-
-        isAnomaly,
-
-        ip: cleanData.ip,
-
-        attackType,
-      });
 
       /**
-       * ================= CREATE ALERT =================
-       *
-       * IMPORTANT:
-       * alerts.service.js handles:
-       * - socket emissions
-       * - traffic_update events
-       * - real-time updates
-       *
-       * DO NOT emit traffic here
-       * to prevent duplicate frontend events.
+       * ============================================
+       * REALTIME TRAFFIC
+       * ============================================
+       */
+      emitTrafficUpdate(
+
+        io,
+
+        userId,
+
+        {
+
+          requests:
+            cleanData.requests,
+
+          isAnomaly,
+
+          ip:
+            cleanData.ip,
+
+          attackType
+
+        }
+
+      );
+
+
+
+      /**
+       * ============================================
+       * ALERT
+       * ============================================
        */
       let alert = null;
 
-      if (isAnomaly) {
+
+      if (
+        isAnomaly
+      ) {
+
         alert =
           await createAlert(
+
             {
-              ip: log.ip,
+
+              ip:
+                log.ip,
 
               anomalyScore,
 
@@ -298,30 +467,42 @@ const processLog = async (
 
               severity,
 
-              requests:
-                log.requests,
+              message:
+                `${attackType} threat detected`,
 
-              failedLogins:
-                log.failedLogins,
+              meta: {
 
-              timestamp:
-                new Date(),
+                requests:
+                  log.requests,
+
+                failedLogins:
+                  log.failedLogins
+
+              }
+
             },
 
             io,
 
             userId
+
           );
+
       }
 
+
+
       logger.info(
-        `✅ Log processed for user: ${userId}`
+        `Log processed for ${userId}`
       );
 
+
       return {
+
         log,
 
         mlResult: {
+
           is_anomaly:
             isAnomaly,
 
@@ -330,116 +511,152 @@ const processLog = async (
 
           attackType,
 
-          severity,
+          severity
+
         },
 
-        alert,
+        alert
+
       };
-    } catch (error) {
+
+    }
+    catch (error) {
+
       logger.error(
-        `❌ processLog Error: ${error.message}`
+        `processLog error: ${error.message}`
       );
 
       throw error;
+
     }
+
   };
 
 
-  /**
-   * ================= GET USER LOGS =================
-   * Multi-user safe historical logs
-   */
-  const getLogs = async (
+
+/**
+ * ============================================
+ * GET LOGS
+ * ============================================
+ */
+const getLogs =
+  async (
     userId,
     options = {}
   ) => {
+
     try {
-      if (!userId) {
-        throw new Error(
-          "User ID is required"
+
+      const limit =
+        Math.min(
+          Number(
+            options.limit
+          ) || 100,
+          500
         );
-      }
 
-      // ================= PAGINATION =================
-      const limit = Math.min(
-        Number(options.limit) || 100,
-        500
-      );
-
-      const page = Math.max(
-        Number(options.page) || 1,
-        1
-      );
+      const page =
+        Math.max(
+          Number(
+            options.page
+          ) || 1,
+          1
+        );
 
       const skip =
-        (page - 1) * limit;
+        (page - 1)
+        *
+        limit;
 
-      // ================= FILTERS =================
+
       const query = {
-        user: userId,
+
+        user: userId
+
       };
 
+
       if (
-        options.attackType &&
-        allowedAttackTypes.includes(
-          options.attackType
-        )
+        options.attackType
       ) {
+
         query.attackType =
           options.attackType;
+
       }
+
 
       if (
-        typeof options.is_anomaly !==
-        "undefined"
+        typeof options
+          .is_anomaly !== "undefined"
       ) {
+
         query.is_anomaly =
           options.is_anomaly;
+
       }
 
-      // ================= FETCH LOGS =================
+
       const logs =
-        await Log.find(query)
+        await Log.find(
+          query
+        )
           .sort({
-            createdAt: -1,
+
+            createdAt: -1
+
           })
           .skip(skip)
           .limit(limit)
           .lean();
 
-      // ================= TOTAL =================
+
       const total =
         await Log.countDocuments(
           query
         );
 
+
       return {
+
         logs,
 
         pagination: {
+
           total,
 
           page,
 
           limit,
 
-          pages: Math.ceil(
-            total / limit
-          ),
-        },
+          pages:
+            Math.ceil(
+              total / limit
+            )
+
+        }
+
       };
-    } catch (error) {
+
+    }
+    catch (error) {
+
       logger.error(
-        `❌ getLogs Error: ${error.message}`
+        `getLogs error: ${error.message}`
       );
 
       throw error;
+
     }
+
   };
 
 
-  export default {
-    processLog,
 
-    getLogs,
-  };
+export default {
+
+  processLog,
+
+  getLogs
+
+};

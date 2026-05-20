@@ -4,13 +4,18 @@ import crypto from "crypto";
 
 const userSchema = new mongoose.Schema(
   {
-    // ================= EMAIL =================
+    /**
+     * ============================================
+     * EMAIL
+     * ============================================
+     */
     email: {
+
       type: String,
 
       required: [
         true,
-        "Email is required",
+        "Email is required"
       ],
 
       unique: true,
@@ -19,117 +24,191 @@ const userSchema = new mongoose.Schema(
 
       trim: true,
 
-      index: true,
+      index: true
+
     },
 
-    // ================= PASSWORD =================
+
+
+    /**
+     * ============================================
+     * PASSWORD
+     * ============================================
+     */
     password: {
+
       type: String,
 
       required: [
         true,
-        "Password is required",
+        "Password required"
       ],
 
       minlength: [
         8,
-        "Password must be at least 8 characters long",
+        "Password must contain minimum 8 characters"
       ],
 
-      select: false,
+      select: false
+
     },
 
-    // ================= ROLE =================
+
+
+    /**
+     * ============================================
+     * ROLE
+     * ============================================
+     */
     role: {
+
       type: String,
 
       enum: [
         "user",
-        "admin",
+        "admin"
       ],
 
-      default: "user",
+      default: "user"
+
     },
 
-    // ================= ORGANIZATION =================
-    organizationId: {
-      type:
-        mongoose.Schema.Types
-          .ObjectId,
 
-      ref: "Organization",
+
+    /**
+     * ============================================
+     * ORGANIZATION
+     * ============================================
+     */
+    organizationId: {
+
+      type:
+        mongoose.Schema.Types.ObjectId,
+
+      ref:
+        "Organization",
 
       default: null,
 
-      index: true,
+      index: true
+
     },
 
-    // ================= USER API KEY =================
+
+
+    /**
+     * ============================================
+     * API KEY
+     * ============================================
+     */
     apiKey: {
+
       type: String,
 
       unique: true,
 
-      index: true,
-
       select: false,
+
+      index: true
+
     },
 
-    // ================= REFRESH TOKEN =================
+
+
+    /**
+     * ============================================
+     * REFRESH TOKEN
+     * ============================================
+     */
     refreshToken: {
+
       type: String,
 
       default: null,
 
-      select: false,
+      select: false
+
     },
 
-    // ================= ACTIVE STATUS =================
+
+
+    /**
+     * ============================================
+     * ACTIVE STATUS
+     * ============================================
+     */
     isActive: {
+
       type: Boolean,
 
-      default: true,
+      default: true
+
     },
 
-    // ================= LAST LOGIN =================
+
+
+    /**
+     * ============================================
+     * LAST LOGIN
+     * ============================================
+     */
     lastLoginAt: {
+
       type: Date,
 
-      default: null,
-    },
-  },
+      default: null
 
+    }
+
+  },
   {
     timestamps: true,
 
-    versionKey: false,
+    versionKey: false
   }
 );
 
-// ================= INDEXES =================
+
+
+/**
+ * ============================================
+ * INDEXES
+ * ============================================
+ */
+
 userSchema.index({
-  email: 1,
+  organizationId: 1
 });
 
 userSchema.index({
-  organizationId: 1,
+  role: 1
 });
 
-userSchema.index({
-  role: 1,
-});
 
-// ================= HASH PASSWORD + GENERATE API KEY =================
+
+/**
+ * ============================================
+ * HASH PASSWORD
+ * GENERATE API KEY
+ * ============================================
+ */
+
 userSchema.pre(
   "save",
-  async function () {
+  async function (next) {
+
     try {
-      // ================= HASH PASSWORD =================
+
+      /**
+       * Hash password only if modified
+       */
+
       if (
         this.isModified(
           "password"
         )
       ) {
+
         const salt =
           await bcrypt.genSalt(
             12
@@ -140,46 +219,107 @@ userSchema.pre(
             this.password,
             salt
           );
+
       }
 
-      // ================= GENERATE API KEY =================
-      // only on initial creation
+
+      /**
+       * Generate API key only once
+       */
+
       if (
         this.isNew &&
         !this.apiKey
       ) {
+
         this.apiKey =
           crypto
-            .randomBytes(32)
-            .toString("hex");
+            .randomBytes(
+              32
+            )
+            .toString(
+              "hex"
+            );
+
       }
-    } catch (error) {
-      throw error;
+
+      next();
+
     }
+    catch (error) {
+
+      next(error);
+
+    }
+
   }
 );
 
-// ================= COMPARE PASSWORD =================
+
+
+/**
+ * ============================================
+ * COMPARE PASSWORD
+ * ============================================
+ */
+
 userSchema.methods.comparePassword =
   async function (
     candidatePassword
   ) {
+
     if (
       !candidatePassword ||
       !this.password
     ) {
+
       return false;
+
     }
 
-    return bcrypt.compare(
+    return await bcrypt.compare(
+
       candidatePassword,
+
       this.password
+
     );
+
   };
 
-// ================= SAFE JSON OUTPUT =================
+
+
+/**
+ * ============================================
+ * HASH REFRESH TOKEN
+ * ============================================
+ */
+
+userSchema.methods.hashToken =
+  function (token) {
+
+    return crypto
+      .createHash(
+        "sha256"
+      )
+      .update(token)
+      .digest(
+        "hex"
+      );
+
+  };
+
+
+
+/**
+ * ============================================
+ * SAFE RESPONSE
+ * ============================================
+ */
+
 userSchema.methods.toJSON =
   function () {
+
     const user =
       this.toObject();
 
@@ -189,14 +329,22 @@ userSchema.methods.toJSON =
 
     delete user.apiKey;
 
-    delete user.__v;
-
     return user;
+
   };
 
-// ================= SAFE MODEL EXPORT =================
+
+
+/**
+ * ============================================
+ * EXPORT
+ * ============================================
+ */
+
 const User =
+
   mongoose.models.User ||
+
   mongoose.model(
     "User",
     userSchema

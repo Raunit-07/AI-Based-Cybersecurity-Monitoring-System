@@ -13,10 +13,16 @@ class PredictionRequest(BaseModel):
 
 # ================= RESPONSE DATA =================
 class PredictionData(BaseModel):
+
     anomaly_score: float
+
     is_anomaly: bool
+
     attackType: str
 
+    confidence: int
+
+    reason: str
 
 # ================= FULL RESPONSE =================
 class PredictionResponse(BaseModel):
