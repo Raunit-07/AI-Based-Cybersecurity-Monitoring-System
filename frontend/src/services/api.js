@@ -434,6 +434,40 @@ export const sendLog =
 
 /**
  * ================================
+ * DEVICE APIs
+ * ================================
+ */
+
+/**
+ * Fetch all registered devices
+ */
+export const fetchDevices = async () => {
+  const res = await API.get("/devices");
+  if (Array.isArray(res?.data?.devices)) {
+    return res.data.devices;
+  }
+  if (Array.isArray(res?.data)) {
+    return res.data;
+  }
+  if (Array.isArray(res)) {
+    return res;
+  }
+  return [];
+};
+
+/**
+ * Fetch a single device's detail/history
+ */
+export const fetchDeviceById = async (id) => {
+  if (!id) {
+    throw new Error("Device ID required");
+  }
+  const res = await API.get(`/devices/${id}`);
+  return res?.data || res;
+};
+
+/**
+ * ================================
  * EXPORT AXIOS INSTANCE
  * ================================
  */

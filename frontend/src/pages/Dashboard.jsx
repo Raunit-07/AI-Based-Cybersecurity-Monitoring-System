@@ -3,7 +3,7 @@ import { TrafficChart } from "../components/TrafficChart";
 import { AlertsList } from "../components/AlertsList";
 import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
 
-import { fetchAlerts } from "../services/api";
+import { fetchAlerts, fetchDevices } from "../services/api";
 import { useSuspiciousIPs } from "../hooks/useThreatData";
 import { useLiveTraffic } from "../hooks/useLiveTraffic";
 import ThreatTimeline from "../components/ThreatTimeline";
@@ -11,7 +11,7 @@ import SuspiciousIPs from "../components/SuspiciousIPs";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "../hooks/useAuth";
 
-import { Shield, AlertTriangle, Activity, Database } from "lucide-react";
+import { Shield, AlertTriangle, Activity, Database, Laptop } from "lucide-react";
 
 // ================= MAIN COMPONENT =================
 export const Dashboard = () => {
@@ -27,12 +27,22 @@ export const Dashboard = () => {
     staleTime: 30 * 1000,
   });
 
+  // ================= DEVICES VIA REACT QUERY =================
+  const { data: devices = [], isLoading: loadingDevices } = useQuery({
+    queryKey: ["devices", user?.id],
+    queryFn: fetchDevices,
+    enabled: !!user?.id,
+    staleTime: 30 * 1000,
+  });
+
   // ================= SUSPICIOUS IPS =================
   const { data: ips = [], isLoading: isLoadingIPs } = useSuspiciousIPs();
 
   // ================= SAFE DATA =================
   const safeAlerts = Array.isArray(alerts) ? alerts : [];
   const safeIPs = Array.isArray(ips) ? ips : [];
+  const safeDevices = Array.isArray(devices) ? devices : [];
+  const onlineDevices = safeDevices.filter((d) => d.status === "online").length;
 
   // ================= STATS =================
 
@@ -81,7 +91,7 @@ export const Dashboard = () => {
         </div>
 
         {/* ================= STATS ================= */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           <StatCard
             title="Active Threats"
             value={activeThreats}
@@ -101,9 +111,15 @@ export const Dashboard = () => {
           />
 
           <StatCard
+            title="Active Devices"
+            value={`${onlineDevices}/${safeDevices.length}`}
+            icon={<Laptop className="w-6 h-6 text-green-400" />}
+          />
+
+          <StatCard
             title="Monitored IPs"
             value={safeIPs.length}
-            icon={<Database className="w-6 h-6 text-green-400" />}
+            icon={<Database className="w-6 h-6 text-purple-400" />}
           />
         </div>
 
@@ -120,6 +136,46 @@ export const Dashboard = () => {
               <Loader />
             ) : (
               <AlertsList alerts={safeAlerts} limit={6} />
+            )}
+          </div>
+        </div>
+
+        {/* ================= DEVICE STATUS CARDS ================= */}
+        <div className="w-full">
+          <div className="bg-surface border border-gray-800 rounded-xl p-6">
+            <h2 className="text-white text-lg font-semibold mb-4 flex items-center gap-2">
+              <Laptop className="w-5 h-5 text-blue-500" />
+              Connected Agents Status
+            </h2>
+            {loadingDevices ? (
+              <div className="text-gray-400 text-sm">Loading agents...</div>
+            ) : safeDevices.length === 0 ? (
+              <div className="text-gray-400 text-sm">No agent devices registered.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {safeDevices.map((d) => (
+                  <div
+                    key={d._id || d.deviceId}
+                    className="p-4 rounded-xl border border-gray-800 bg-black/45 flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-bold text-sm truncate">{d.hostname || d.deviceId}</span>
+                        <span
+                          className={`w-2.5 h-2.5 rounded-full ${
+                            d.status === "online" ? "bg-green-500" : "bg-red-500"
+                          }`}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">OS: {d.os || "Unknown"}</p>
+                    </div>
+                    <div className="mt-4 flex items-center justify-between text-[11px] text-gray-500">
+                      <span>Seen: {d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString() : "Never"}</span>
+                      <span className="text-red-400 font-semibold">Threats: {d.threatCount || 0}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>

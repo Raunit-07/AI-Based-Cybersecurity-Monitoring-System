@@ -24,6 +24,20 @@ const Alerts = React.lazy(() =>
   }))
 );
 
+const Devices = React.lazy(() => import("./pages/Devices"));
+
+const TimelinePage = React.lazy(() =>
+  import("./pages/TimelinePage").then((module) => ({
+    default: module.TimelinePage,
+  }))
+);
+
+const ThreatAnalytics = React.lazy(() =>
+  import("./pages/ThreatAnalytics").then((module) => ({
+    default: module.ThreatAnalytics,
+  }))
+);
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -68,6 +82,39 @@ function App() {
                   <ErrorBoundary>
                     <Suspense fallback={<PageLoader />}>
                       <Alerts />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+
+              <Route
+                path="devices"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <Devices />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+
+              <Route
+                path="timeline"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <TimelinePage />
+                    </Suspense>
+                  </ErrorBoundary>
+                }
+              />
+
+              <Route
+                path="analytics"
+                element={
+                  <ErrorBoundary>
+                    <Suspense fallback={<PageLoader />}>
+                      <ThreatAnalytics />
                     </Suspense>
                   </ErrorBoundary>
                 }
