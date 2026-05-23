@@ -13,6 +13,9 @@ import alertsController from "./controllers/alerts.controller.js";
 
 import { authMiddleware } from "./middlewares/auth.middleware.js";
 import { attachIO } from "./middlewares/socket.js";
+import { enforceHttps } from "./middlewares/httpsEnforcer.js";
+import { csrfProtection } from "./middlewares/csrf.js";
+import { logAuditEvent } from "./utils/auditLogger.js";
 
 const app = express();
 
@@ -24,11 +27,24 @@ app.set("trust proxy", 1);
 /**
  * ================= SECURITY =================
  */
+app.use(enforceHttps);
+
 app.use(
   helmet({
     crossOriginResourcePolicy: {
       policy: "cross-origin",
     },
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "blob:"],
+        connectSrc: ["'self'", "wss:", "ws:", "http://localhost:*", "https://*"]
+      }
+    },
+    xFrameOptions: { action: "deny" },
+    referrerPolicy: { policy: "same-origin" }
   })
 );
 
@@ -107,9 +123,54 @@ app.options(/.*/, cors(corsOptions));
 app.use(express.json({ limit: "10kb" }));
 app.use(express.urlencoded({ extended: true, limit: "10kb" }));
 app.use(cookieParser());
+app.use(csrfProtection);
+
+const auditLogMiddleware = (req, res, next) => {
+  const criticalRoutes = [
+    { path: "/api/auth/login", action: "auth.login" },
+    { path: "/api/auth/register", action: "auth.register" },
+    { path: "/api/auth/regenerate-api-key", action: "api_key.regenerate" },
+    { path: "/api/devices/register", action: "device.register" }
+  ];
+
+  const matched = criticalRoutes.find(r => req.originalUrl?.startsWith(r.path));
+  if (!matched) {
+    return next();
+  }
+
+  const originalEnd = res.end;
+  res.end = function (chunk, encoding) {
+    res.end = originalEnd;
+    res.end(chunk, encoding);
+
+    const status = res.statusCode >= 200 && res.statusCode < 300 ? "success" : "failure";
+    const userId = req.user?._id || req.user?.id || null;
+    const ip = req.ip || req.headers["x-forwarded-for"] || req.connection.remoteAddress || "0.0.0.0";
+    const userAgent = req.headers["user-agent"] || "unknown";
+
+    logAuditEvent({
+      userId,
+      ip,
+      action: matched.action,
+      status,
+      details: {
+        method: req.method,
+        statusCode: res.statusCode,
+        endpoint: req.originalUrl
+      },
+      userAgent
+    }).catch(err => console.error("Audit logging error:", err));
+  };
+
+  next();
+};
+
+app.use(auditLogMiddleware);
 
 /**
- * ================= SAFE CUSTOM SANITIZER =================
+ * ==================================================
+ * SAFE CUSTOM SANITIZER (NoSQL injection + HTML XSS Clean)
+ * ==================================================
  */
 const sanitizeObject = (obj) => {
   if (!obj || typeof obj !== "object") return obj;
@@ -121,10 +182,21 @@ const sanitizeObject = (obj) => {
   const cleaned = {};
 
   for (const [key, value] of Object.entries(obj)) {
+    // Prevent NoSQL query injection by removing $ and .
     const safeKey = key.replace(/\$/g, "").replace(/\./g, "");
 
-    cleaned[safeKey] =
-      value && typeof value === "object" ? sanitizeObject(value) : value;
+    let safeValue = value;
+    if (value && typeof value === "object") {
+      safeValue = sanitizeObject(value);
+    } else if (typeof value === "string") {
+      // Prevent XSS by stripping HTML tags (skipping keys and passwords)
+      const skipXss = ["password", "confirmPassword", "accessToken", "refreshToken", "apiKey", "deviceKey"];
+      if (!skipXss.includes(safeKey)) {
+        safeValue = value.replace(/<[^>]*>/g, "");
+      }
+    }
+
+    cleaned[safeKey] = safeValue;
   }
 
   return cleaned;
