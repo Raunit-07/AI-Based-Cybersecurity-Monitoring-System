@@ -6,8 +6,26 @@ import { emitDeviceOnline } from "../services/realtime.service.js";
  * Service to create a new device registration.
  * Returns the device document and the raw apiKey.
  */
-export const registerDeviceService = async ({ ownerId, payload, io, req }) => {
-  const { deviceId, hostname, os, agentVersion, localIp, metadata } = payload;
+export const registerDeviceService = async (args) => {
+  let { ownerId, payload, io, req, res } = args || {};
+
+  // Handle the controller's direct call: registerDeviceService({ req, res })
+  let isDirectControllerCall = false;
+  if (req && res && !payload) {
+    isDirectControllerCall = true;
+    io = req.app?.get("io");
+    ownerId = req.user?._id || req.device?.userId || null;
+    payload = req.body;
+  }
+
+  const { deviceId, hostname, os, agentVersion, localIp, metadata } = payload || {};
+
+  if (!deviceId || !hostname || !os) {
+    if (isDirectControllerCall) {
+      return apiResponse(res, 400, false, null, "Missing required fields");
+    }
+    throw new Error("Missing required fields");
+  }
 
   // Check existing device
   const existingDevice = await Device.findOne({ deviceId, userId: ownerId });
@@ -20,7 +38,7 @@ export const registerDeviceService = async ({ ownerId, payload, io, req }) => {
     existingDevice.os = os;
     existingDevice.agentVersion = agentVersion || existingDevice.agentVersion;
     existingDevice.localIp = localIp || existingDevice.localIp;
-    existingDevice.ipAddress = req.ip;
+    existingDevice.ipAddress = req?.ip || "";
     existingDevice.metadata = { ...existingDevice.metadata, ...(metadata || {}) };
     await existingDevice.save();
 
@@ -31,6 +49,13 @@ export const registerDeviceService = async ({ ownerId, payload, io, req }) => {
       lastSeen: existingDevice.lastSeen,
     }, ownerId);
 
+    if (isDirectControllerCall) {
+      return apiResponse(res, 200, true, {
+        deviceId: existingDevice.deviceId,
+        status: existingDevice.status,
+        reconnect: true,
+      }, "Device reconnected successfully");
+    }
     return { device: existingDevice, rawApiKey: null, reconnect: true };
   }
 
@@ -50,7 +75,7 @@ export const registerDeviceService = async ({ ownerId, payload, io, req }) => {
     status: "online",
     lastSeen: now,
     heartbeatAt: now,
-    ipAddress: req.ip,
+    ipAddress: req?.ip || "",
     localIp: localIp || "",
     metadata: {
       architecture: metadata?.architecture || "",
@@ -67,6 +92,14 @@ export const registerDeviceService = async ({ ownerId, payload, io, req }) => {
     lastSeen: device.lastSeen,
   }, ownerId);
 
+  if (isDirectControllerCall) {
+    return apiResponse(res, 201, true, {
+      deviceId: device.deviceId,
+      apiKey: rawApiKey,
+      status: device.status,
+      reconnect: false,
+    }, "Device registered successfully");
+  }
   return { device, rawApiKey, reconnect: false };
 };
 

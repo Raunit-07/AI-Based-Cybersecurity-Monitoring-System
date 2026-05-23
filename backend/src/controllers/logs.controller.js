@@ -2,6 +2,7 @@ import logsService from "../services/logs.service.js";
 import apiResponse from "../utils/apiResponse.js";
 import catchAsync from "../utils/catchAsync.js";
 import logger from "../utils/logger.js";
+import { getLogQueue } from "../jobs/logQueue.js";
 
 // const logQueue = getLogQueue();
 
@@ -13,7 +14,7 @@ Queue-based processing
 */
 
 const createLog = catchAsync(async (req, res) => {
-  const userId = req.systemUser?._id || req.user?._id || null;
+  const userId = req.systemUser?._id || req.user?._id || req.device?.userId || null;
 
   const logs = Array.isArray(req.logs)
     ? req.logs
@@ -56,6 +57,8 @@ const createLog = catchAsync(async (req, res) => {
         timestamp: logData.timestamp ? new Date(logData.timestamp) : new Date(),
 
         user: userId,
+
+        metadata: logData.metadata,
       };
 
       jobs.push({

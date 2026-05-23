@@ -3,6 +3,7 @@ import logger from "../utils/logger.js";
 import { createAlert } from "./alerts.service.js";
 import { detectThreat } from "./mlClient.js";
 import { emitTrafficUpdate } from "./realtime.service.js";
+import { analyzeLog } from "../threat/threatEngine.js";
 
 /**
  * ============================================
@@ -141,10 +142,25 @@ const processLog = async (logData, io, userId) => {
 
     /**
      * ============================================
+     * THREAT DETECTION ENGINE
+     * ============================================
+     */
+    let threatResult = null;
+    try {
+      threatResult = analyzeLog(logData);
+    } catch (err) {
+      logger.error(`Threat Engine error: ${err.message}`);
+    }
+
+    /**
+     * ============================================
      * SCORE
      * ============================================
      */
-    const anomalyScore = normalizeScore(prediction?.anomaly_score);
+    const baseAnomalyScore = normalizeScore(prediction?.anomaly_score);
+    const anomalyScore = threatResult
+      ? Math.max(baseAnomalyScore, threatResult.threatScore)
+      : baseAnomalyScore;
 
     /**
      * ============================================
@@ -155,7 +171,8 @@ const processLog = async (logData, io, userId) => {
       prediction?.is_anomaly === true ||
       anomalyScore >= 0.7 ||
       cleanData.requests > 800 ||
-      cleanData.failedLogins > 10;
+      cleanData.failedLogins > 10 ||
+      (threatResult && threatResult.is_anomaly === true);
 
     /**
      * ============================================
@@ -168,6 +185,17 @@ const processLog = async (logData, io, userId) => {
       attackType = "Brute Force";
     } else if (cleanData.requests > 800) {
       attackType = "DDoS";
+    } else if (threatResult && threatResult.attackType !== "Unknown") {
+      const classification = threatResult.attackType;
+      if (classification === "Brute Force") {
+        attackType = "Brute Force";
+      } else if (classification === "Recon") {
+        attackType = "Port Scan";
+      } else if (classification === "Malware") {
+        attackType = "Malware";
+      } else if (classification === "Suspicious Activity") {
+        attackType = "Suspicious";
+      }
     } else if (isAnomaly && attackType === "Normal") {
       attackType = "Suspicious";
     }
@@ -177,13 +205,15 @@ const processLog = async (logData, io, userId) => {
      * SEVERITY
      * ============================================
      */
-    const severity = getSeverity(
-      cleanData,
+    const severity = threatResult && threatResult.severity !== "low"
+      ? threatResult.severity
+      : getSeverity(
+          cleanData,
 
-      anomalyScore,
+          anomalyScore,
 
-      attackType,
-    );
+          attackType,
+        );
 
     /**
      * ============================================
