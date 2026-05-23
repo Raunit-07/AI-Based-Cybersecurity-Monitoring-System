@@ -15,7 +15,7 @@ const router = express.Router();
  * ALL alert routes require authentication
  */
 router.use(authMiddleware);
-
+router.post("/", alertsController.createAlert);
 /**
  * =====================================
  * ALERT ROUTES
@@ -57,6 +57,8 @@ router.get(
     "/suspicious-ips",
     alertsController.getSuspiciousIPs
 );
+router.get("/:id", alertsController.getAlertById);
+router.patch("/:id/status", alertsController.updateAlertStatus);
 
 /**
  * ================= RESOLVE ALERT =================

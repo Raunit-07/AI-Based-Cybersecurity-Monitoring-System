@@ -3,8 +3,8 @@ import express from "express";
 import authController from "../controllers/auth.controller.js";
 
 import {
-  registerValidator,
   loginValidator,
+  registerValidator,
 } from "../validators/auth.validator.js";
 
 import validate from "../middlewares/validate.middleware.js";
@@ -33,11 +33,9 @@ router.post(
 
   authLimiter,
 
-  registerValidator,
+  validate(registerValidator),
 
-  validate,
-
-  authController.register
+  authController.register,
 );
 
 /**
@@ -51,11 +49,9 @@ router.post(
 
   authLimiter,
 
-  loginValidator,
+  validate(loginValidator),
 
-  validate,
-
-  authController.login
+  authController.login,
 );
 
 /**
@@ -71,7 +67,7 @@ router.post(
 
   authLimiter,
 
-  authController.refreshToken
+  authController.refreshToken,
 );
 
 /**
@@ -88,7 +84,7 @@ router.get(
 
   authMiddleware,
 
-  authController.getMe
+  authController.getMe,
 );
 
 /**
@@ -101,7 +97,7 @@ router.post(
 
   authMiddleware,
 
-  authController.logout
+  authController.logout,
 );
 
 /**
@@ -112,7 +108,7 @@ router.get(
 
   authMiddleware,
 
-  authController.getApiKey
+  authController.getApiKey,
 );
 
 /**
@@ -123,7 +119,7 @@ router.post(
 
   authMiddleware,
 
-  authController.regenerateApiKey
+  authController.regenerateApiKey,
 );
 
 export default router;

@@ -1,37 +1,29 @@
 import authService from "../services/auth.service.js";
-import catchAsync from "../utils/catchAsync.js";
 import apiResponse from "../utils/apiResponse.js";
+import catchAsync from "../utils/catchAsync.js";
 
 /**
- * ================= COOKIE CONFIG =================
+ * =====================================
+ * COOKIE OPTIONS
+ * =====================================
  */
 const getCookieOptions = () => {
-  const isProduction =
-    process.env.NODE_ENV === "production";
+  const isProduction = process.env.NODE_ENV === "production";
 
   return {
     httpOnly: true,
-
     secure: isProduction,
-
-    sameSite: isProduction
-      ? "none"
-      : "lax",
-
+    sameSite: isProduction ? "none" : "lax",
     path: "/",
   };
 };
 
 /**
- * ================= SET TOKENS =================
+ * =====================================
+ * SET AUTH COOKIES
+ * =====================================
  */
 const setTokensInCookies = (res, accessToken, refreshToken) => {
-  if (!accessToken || !refreshToken) {
-    const error = new Error("Missing authentication tokens");
-    error.status = 500;
-    throw error;
-  }
-
   const cookieOptions = getCookieOptions();
 
   res.cookie("accessToken", accessToken, {
@@ -46,7 +38,9 @@ const setTokensInCookies = (res, accessToken, refreshToken) => {
 };
 
 /**
- * ================= CLEAR TOKENS =================
+ * =====================================
+ * CLEAR COOKIES
+ * =====================================
  */
 const clearTokens = (res) => {
   const cookieOptions = getCookieOptions();
@@ -56,22 +50,16 @@ const clearTokens = (res) => {
 };
 
 /**
- * ================= REGISTER =================
+ * =====================================
+ * REGISTER
+ * =====================================
  */
 const register = catchAsync(async (req, res) => {
   let { email, password } = req.body;
 
-  email = String(email || "").trim().toLowerCase();
-
-  if (!email || !password) {
-    return apiResponse(
-      res,
-      400,
-      false,
-      null,
-      "Email and password are required"
-    );
-  }
+  email = String(email || "")
+    .trim()
+    .toLowerCase();
 
   const result = await authService.registerUser(email, password);
 
@@ -83,28 +71,25 @@ const register = catchAsync(async (req, res) => {
     res,
     201,
     true,
-    { user },
-    "User registered successfully"
+    {
+      user,
+      accessToken, // Added for Postman / PowerShell testing
+    },
+    "User registered successfully",
   );
 });
 
 /**
- * ================= LOGIN =================
+ * =====================================
+ * LOGIN
+ * =====================================
  */
 const login = catchAsync(async (req, res) => {
   let { email, password } = req.body;
 
-  email = String(email || "").trim().toLowerCase();
-
-  if (!email || !password) {
-    return apiResponse(
-      res,
-      400,
-      false,
-      null,
-      "Email and password required"
-    );
-  }
+  email = String(email || "")
+    .trim()
+    .toLowerCase();
 
   const result = await authService.loginUser(email, password);
 
@@ -112,32 +97,45 @@ const login = catchAsync(async (req, res) => {
 
   setTokensInCookies(res, accessToken, refreshToken);
 
-  return apiResponse(res, 200, true, { user }, "Login successful");
+  return apiResponse(
+    res,
+    200,
+    true,
+    {
+      user,
+      accessToken, // Added for testing
+    },
+    "Login successful",
+  );
 });
 
 /**
- * ================= REFRESH TOKEN =================
+ * =====================================
+ * REFRESH TOKEN
+ * =====================================
  */
 const refreshToken = catchAsync(async (req, res) => {
-  const existingRefreshToken = req.cookies?.refreshToken;
+  const token = req.cookies?.refreshToken;
 
-  if (!existingRefreshToken) {
-    return apiResponse(res, 401, false, null, "Refresh token missing");
-  }
+  const result = await authService.refreshAuthToken(token);
 
-  const tokens = await authService.refreshAuthToken(existingRefreshToken);
+  setTokensInCookies(res, result.accessToken, result.refreshToken);
 
-  if (!tokens?.accessToken || !tokens?.refreshToken) {
-    return apiResponse(res, 401, false, null, "Invalid refresh token");
-  }
-
-  setTokensInCookies(res, tokens.accessToken, tokens.refreshToken);
-
-  return apiResponse(res, 200, true, {}, "Token refreshed successfully");
+  return apiResponse(
+    res,
+    200,
+    true,
+    {
+      accessToken: result.accessToken,
+    },
+    "Token refreshed",
+  );
 });
 
 /**
- * ================= LOGOUT =================
+ * =====================================
+ * LOGOUT
+ * =====================================
  */
 const logout = catchAsync(async (req, res) => {
   if (req.user?.id) {
@@ -150,58 +148,37 @@ const logout = catchAsync(async (req, res) => {
 });
 
 /**
- * ================= CURRENT USER =================
+ * =====================================
+ * CURRENT USER
+ * =====================================
  */
 const getMe = catchAsync(async (req, res) => {
-  if (!req.user) {
-    return apiResponse(res, 401, false, null, "Unauthorized");
-  }
-
   return apiResponse(
     res,
     200,
     true,
-    { user: req.user },
-    "Current user fetched successfully"
+    {
+      user: req.user,
+    },
+    "Current user",
   );
 });
 
 /**
- * ================= GET API KEY =================
+ * =====================================
+ * API KEY
+ * =====================================
  */
 const getApiKey = catchAsync(async (req, res) => {
-  if (!req.user?.id) {
-    return apiResponse(res, 401, false, null, "Unauthorized");
-  }
-
   const apiKey = await authService.getUserApiKey(req.user.id);
 
-  return apiResponse(
-    res,
-    200,
-    true,
-    { apiKey },
-    "API key fetched successfully"
-  );
+  return apiResponse(res, 200, true, { apiKey }, "API key fetched");
 });
 
-/**
- * ================= REGENERATE API KEY =================
- */
 const regenerateApiKey = catchAsync(async (req, res) => {
-  if (!req.user?.id) {
-    return apiResponse(res, 401, false, null, "Unauthorized");
-  }
-
   const apiKey = await authService.regenerateApiKey(req.user.id);
 
-  return apiResponse(
-    res,
-    200,
-    true,
-    { apiKey },
-    "API key regenerated successfully"
-  );
+  return apiResponse(res, 200, true, { apiKey }, "API key regenerated");
 });
 
 export default {

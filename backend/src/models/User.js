@@ -1,6 +1,6 @@
-import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
@@ -10,25 +10,13 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     email: {
-
       type: String,
-
-      required: [
-        true,
-        "Email is required"
-      ],
-
+      required: [true, "Email is required"],
       unique: true,
-
       lowercase: true,
-
       trim: true,
-
-      index: true
-
+      index: true,
     },
-
-
 
     /**
      * ============================================
@@ -36,24 +24,11 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     password: {
-
       type: String,
-
-      required: [
-        true,
-        "Password required"
-      ],
-
-      minlength: [
-        8,
-        "Password must contain minimum 8 characters"
-      ],
-
-      select: false
-
+      required: [true, "Password required"],
+      minlength: [8, "Password must contain minimum 8 characters"],
+      select: false,
     },
-
-
 
     /**
      * ============================================
@@ -61,19 +36,10 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     role: {
-
       type: String,
-
-      enum: [
-        "user",
-        "admin"
-      ],
-
-      default: "user"
-
+      enum: ["user", "admin"],
+      default: "user",
     },
-
-
 
     /**
      * ============================================
@@ -81,20 +47,11 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     organizationId: {
-
-      type:
-        mongoose.Schema.Types.ObjectId,
-
-      ref:
-        "Organization",
-
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
       default: null,
-
-      index: true
-
+      index: true,
     },
-
-
 
     /**
      * ============================================
@@ -102,18 +59,11 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     apiKey: {
-
       type: String,
-
       unique: true,
-
       select: false,
-
-      index: true
-
+      index: true,
     },
-
-
 
     /**
      * ============================================
@@ -121,16 +71,10 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     refreshToken: {
-
       type: String,
-
       default: null,
-
-      select: false
-
+      select: false,
     },
-
-
 
     /**
      * ============================================
@@ -138,14 +82,9 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     isActive: {
-
       type: Boolean,
-
-      default: true
-
+      default: true,
     },
-
-
 
     /**
      * ============================================
@@ -153,22 +92,15 @@ const userSchema = new mongoose.Schema(
      * ============================================
      */
     lastLoginAt: {
-
       type: Date,
-
-      default: null
-
-    }
-
+      default: null,
+    },
   },
   {
     timestamps: true,
-
-    versionKey: false
+    versionKey: false,
   }
 );
-
-
 
 /**
  * ============================================
@@ -177,85 +109,45 @@ const userSchema = new mongoose.Schema(
  */
 
 userSchema.index({
-  organizationId: 1
+  organizationId: 1,
 });
 
 userSchema.index({
-  role: 1
+  role: 1,
 });
-
-
 
 /**
  * ============================================
- * HASH PASSWORD
- * GENERATE API KEY
+ * HASH PASSWORD + GENERATE API KEY
  * ============================================
+ *
+ * NOTE:
+ * Async middleware should NOT use next()
+ * Mongoose waits automatically.
  */
 
-userSchema.pre(
-  "save",
-  async function (next) {
+userSchema.pre("save", async function () {
+  /**
+   * Hash password only if modified
+   */
+  if (this.isModified("password")) {
+    const salt = await bcrypt.genSalt(12);
 
-    try {
-
-      /**
-       * Hash password only if modified
-       */
-
-      if (
-        this.isModified(
-          "password"
-        )
-      ) {
-
-        const salt =
-          await bcrypt.genSalt(
-            12
-          );
-
-        this.password =
-          await bcrypt.hash(
-            this.password,
-            salt
-          );
-
-      }
-
-
-      /**
-       * Generate API key only once
-       */
-
-      if (
-        this.isNew &&
-        !this.apiKey
-      ) {
-
-        this.apiKey =
-          crypto
-            .randomBytes(
-              32
-            )
-            .toString(
-              "hex"
-            );
-
-      }
-
-      next();
-
-    }
-    catch (error) {
-
-      next(error);
-
-    }
-
+    this.password = await bcrypt.hash(
+      this.password,
+      salt
+    );
   }
-);
 
-
+  /**
+   * Generate API key once
+   */
+  if (this.isNew && !this.apiKey) {
+    this.apiKey = crypto
+      .randomBytes(32)
+      .toString("hex");
+  }
+});
 
 /**
  * ============================================
@@ -264,52 +156,30 @@ userSchema.pre(
  */
 
 userSchema.methods.comparePassword =
-  async function (
-    candidatePassword
-  ) {
+async function (candidatePassword) {
+  if (!candidatePassword || !this.password) {
+    return false;
+  }
 
-    if (
-      !candidatePassword ||
-      !this.password
-    ) {
-
-      return false;
-
-    }
-
-    return await bcrypt.compare(
-
-      candidatePassword,
-
-      this.password
-
-    );
-
-  };
-
-
+  return bcrypt.compare(
+    candidatePassword,
+    this.password
+  );
+};
 
 /**
  * ============================================
- * HASH REFRESH TOKEN
+ * HASH TOKEN
  * ============================================
  */
 
 userSchema.methods.hashToken =
-  function (token) {
-
-    return crypto
-      .createHash(
-        "sha256"
-      )
-      .update(token)
-      .digest(
-        "hex"
-      );
-
-  };
-
-
+function (token) {
+  return crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+};
 
 /**
  * ============================================
@@ -318,22 +188,15 @@ userSchema.methods.hashToken =
  */
 
 userSchema.methods.toJSON =
-  function () {
+function () {
+  const user = this.toObject();
 
-    const user =
-      this.toObject();
+  delete user.password;
+  delete user.refreshToken;
+  delete user.apiKey;
 
-    delete user.password;
-
-    delete user.refreshToken;
-
-    delete user.apiKey;
-
-    return user;
-
-  };
-
-
+  return user;
+};
 
 /**
  * ============================================
@@ -342,9 +205,7 @@ userSchema.methods.toJSON =
  */
 
 const User =
-
   mongoose.models.User ||
-
   mongoose.model(
     "User",
     userSchema
