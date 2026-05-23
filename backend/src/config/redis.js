@@ -80,23 +80,15 @@ export const connectRedis = async () => {
       "❌ Redis connection failed:",
       error.message
     );
-
     process.exit(1);
-
   }
 };
 
 // ================= GET CONNECTION =================
 
 export const getRedisConnection = () => {
-
   if (!connection) {
-
-    throw new Error(
-      "Redis not initialized"
-    );
-
+    throw new Error("Redis not initialized");
   }
-
   return connection;
 };
