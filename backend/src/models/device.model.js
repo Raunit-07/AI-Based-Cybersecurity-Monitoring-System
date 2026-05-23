@@ -1,276 +1,222 @@
+import crypto from "crypto";
 import mongoose from "mongoose";
 
 /**
  * ==========================================
  * DEVICE SCHEMA
  * ==========================================
- * Represents:
- * - laptops
- * - desktops
- * - servers
- * - VMs
- * - cloud instances
- *
- * Used for:
- * - endpoint monitoring
- * - telemetry ownership
- * - multi-tenant isolation
- * - device health tracking
- * ==========================================
  */
 
-const deviceSchema =
-    new mongoose.Schema(
-        {
-            // ================= DEVICE ID =================
-            deviceId: {
-                type: String,
+const deviceSchema = new mongoose.Schema(
+  {
+    deviceId: {
+      type: String,
+      required: true,
+      unique: true,
+      index: true,
+      trim: true,
+      minlength: 10,
+      maxlength: 255,
+    },
 
-                required: true,
+    hostname: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 255,
+    },
 
-                unique: true,
+    os: {
+      type: String,
+      required: true,
+      trim: true,
 
-                index: true,
+      enum: [
+        "windows",
+        "linux",
+        "macos",
+        "ubuntu",
+        "debian",
+        "centos",
+        "unknown",
+      ],
 
-                trim: true,
+      default: "unknown",
+    },
 
-                minlength: 10,
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Organization",
+      default: null,
+      index: true,
+    },
 
-                maxlength: 255,
-            },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
 
-            // ================= HOSTNAME =================
-            hostname: {
-                type: String,
+    /*
+    ==================================
+    STORED HASH ONLY
+    ==================================
+    */
 
-                required: true,
+    apiKey: {
+      type: String,
 
-                trim: true,
+      required: true,
 
-                maxlength: 255,
-            },
+      select: false,
 
-            // ================= OPERATING SYSTEM =================
-            os: {
-                type: String,
+      index: true,
+    },
 
-                required: true,
+    status: {
+      type: String,
 
-                trim: true,
+      enum: ["online", "offline", "inactive", "quarantined"],
 
-                enum: [
-                    "windows",
-                    "linux",
-                    "macos",
-                    "ubuntu",
-                    "debian",
-                    "centos",
-                    "unknown",
-                ],
+      default: "offline",
 
-                default: "unknown",
-            },
+      index: true,
+    },
 
-            // ================= ORGANIZATION =================
-            organizationId: {
-                type:
-                    mongoose.Schema.Types
-                        .ObjectId,
+    lastSeen: {
+      type: Date,
+      default: Date.now,
+      index: true,
+    },
 
-                ref: "Organization",
+    heartbeatAt: {
+      type: Date,
+      default: Date.now,
+    },
 
-                required: false,
+    agentVersion: {
+      type: String,
+      default: "1.0.0",
+    },
 
-                default: null,
+    ipAddress: {
+      type: String,
+      default: "",
+    },
 
-                index: true,
-            },
+    localIp: {
+      type: String,
+      default: "",
+    },
 
-            // ================= OWNER USER =================
-            userId: {
-                type:
-                    mongoose.Schema.Types
-                        .ObjectId,
+    metadata: {
+      architecture: {
+        type: String,
+        default: "",
+      },
 
-                ref: "User",
+      platform: {
+        type: String,
+        default: "",
+      },
 
-                required: true,
+      cpuUsage: {
+        type: Number,
+        default: 0,
+      },
 
-                index: true,
-            },
+      memoryUsage: {
+        type: Number,
+        default: 0,
+      },
+    },
 
-            // ================= DEVICE API KEY =================
-            apiKey: {
-                type: String,
+    compromised: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
 
-                required: true,
+    isolated: {
+      type: Boolean,
+      default: false,
+    },
+  },
 
-                unique: true,
+  {
+    timestamps: true,
+    versionKey: false,
+  },
+);
 
-                index: true,
+/*
+==================================
+INDEXES
+==================================
+*/
 
-                select: false,
-            },
-
-            // ================= DEVICE STATUS =================
-            status: {
-                type: String,
-
-                enum: [
-                    "online",
-                    "offline",
-                    "inactive",
-                    "quarantined",
-                ],
-
-                default: "offline",
-
-                index: true,
-            },
-
-            // ================= LAST ACTIVE =================
-            lastSeen: {
-                type: Date,
-
-                default: Date.now,
-
-                index: true,
-            },
-
-            // ================= HEARTBEAT =================
-            heartbeatAt: {
-                type: Date,
-
-                default: Date.now,
-            },
-
-            // ================= AGENT VERSION =================
-            agentVersion: {
-                type: String,
-
-                default: "1.0.0",
-
-                trim: true,
-            },
-
-            // ================= PUBLIC IP =================
-            ipAddress: {
-                type: String,
-
-                default: "",
-
-                trim: true,
-            },
-
-            // ================= INTERNAL IP =================
-            localIp: {
-                type: String,
-
-                default: "",
-
-                trim: true,
-            },
-
-            // ================= DEVICE METADATA =================
-            metadata: {
-                architecture: {
-                    type: String,
-                    default: "",
-                },
-
-                platform: {
-                    type: String,
-                    default: "",
-                },
-
-                cpuUsage: {
-                    type: Number,
-                    default: 0,
-                },
-
-                memoryUsage: {
-                    type: Number,
-                    default: 0,
-                },
-            },
-
-            // ================= SECURITY FLAGS =================
-            compromised: {
-                type: Boolean,
-
-                default: false,
-
-                index: true,
-            },
-
-            isolated: {
-                type: Boolean,
-
-                default: false,
-            },
-        },
-
-        {
-            timestamps: true,
-
-            versionKey: false,
-        }
-    );
-
-/**
- * ==========================================
- * INDEXES
- * ==========================================
- */
-
-// Multi-tenant filtering
 deviceSchema.index({
-    organizationId: 1,
-    userId: 1,
+  organizationId: 1,
+  userId: 1,
 });
 
-// Device health queries
 deviceSchema.index({
-    status: 1,
-    lastSeen: -1,
+  status: 1,
+  lastSeen: -1,
 });
 
-// Threat hunting
 deviceSchema.index({
-    compromised: 1,
+  compromised: 1,
 });
 
-// Fast device lookup
 deviceSchema.index({
-    deviceId: 1,
+  deviceId: 1,
 });
 
-/**
- * ==========================================
- * SAFE JSON OUTPUT
- * ==========================================
- */
-deviceSchema.methods.toJSON =
-    function () {
-        const obj =
-            this.toObject();
+/*
+==================================
+STATIC METHODS
+==================================
+*/
 
-        // Never expose apiKey
-        delete obj.apiKey;
+deviceSchema.statics.hashApiKey = function (apiKey) {
+  return crypto.createHash("sha256").update(apiKey).digest("hex");
+};
 
-        return obj;
-    };
+/*
+==================================
+INSTANCE METHODS
+==================================
+*/
 
-/**
- * ==========================================
- * SAFE MODEL EXPORT
- * ==========================================
- */
-const Device =
-    mongoose.models.Device ||
-    mongoose.model(
-        "Device",
-        deviceSchema
-    );
+deviceSchema.methods.compareApiKey = function (candidateKey) {
+  const hashedCandidate = crypto
+    .createHash("sha256")
+    .update(candidateKey)
+    .digest("hex");
+
+  return crypto.timingSafeEqual(
+    Buffer.from(this.apiKey),
+
+    Buffer.from(hashedCandidate),
+  );
+};
+
+/*
+==================================
+SAFE JSON
+==================================
+*/
+
+deviceSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+
+  delete obj.apiKey;
+
+  return obj;
+};
+
+const Device = mongoose.models.Device || mongoose.model("Device", deviceSchema);
 
 export default Device;

@@ -1,340 +1,130 @@
 import logsService from "../services/logs.service.js";
-
-import catchAsync from "../utils/catchAsync.js";
-
 import apiResponse from "../utils/apiResponse.js";
-
+import catchAsync from "../utils/catchAsync.js";
 import logger from "../utils/logger.js";
 
-/**
- * ==================================================
- * CREATE / INGEST LOGS
- * Supports:
- * - single log
- * - batch logs
- * - collector agent
- * - multi-tenant isolation
- * ==================================================
- */
-const createLog = catchAsync(
-  async (req, res) => {
-    try {
+// const logQueue = getLogQueue();
 
-      /**
-       * ==================================================
-       * SOCKET.IO
-       * ==================================================
-       */
-      const io =
-        req.io ||
-        req.app.get("io");
+/*
+==================================================
+CREATE / INGEST LOGS
+Queue-based processing
+==================================================
+*/
 
-      /**
-       * ==================================================
-       * SAFE USER FALLBACK
-       * ==================================================
-       */
-      const userId =
-        req.systemUser?._id ||
-        req.user?._id ||
-        null;
+const createLog = catchAsync(async (req, res) => {
+  const userId = req.systemUser?._id || req.user?._id || null;
 
-      /**
-       * ==================================================
-       * SUPPORT:
-       * - req.logs
-       * - req.body.logs
-       * - single object
-       * ==================================================
-       */
-      const logs =
-        Array.isArray(req.logs)
-          ? req.logs
-          : Array.isArray(req.body.logs)
-            ? req.body.logs
-            : [req.body];
+  const logs = Array.isArray(req.logs)
+    ? req.logs
+    : Array.isArray(req.body.logs)
+      ? req.body.logs
+      : [req.body];
 
-      /**
-       * ==================================================
-       * EMPTY CHECK
-       * ==================================================
-       */
-      if (
-        !logs ||
-        !Array.isArray(logs) ||
-        !logs.length
-      ) {
-        return apiResponse(
-          res,
-          400,
-          false,
-          null,
-          "No logs provided"
-        );
-      }
-
-      /**
-       * DEBUG
-       */
-      console.log(
-        "🔥 FINAL LOGS:",
-        JSON.stringify(
-          logs,
-          null,
-          2
-        )
-      );
-
-      /**
-       * ==================================================
-       * PROCESS RESULTS
-       * ==================================================
-       */
-      const processedResults = [];
-
-      /**
-       * ==================================================
-       * PROCESS EACH LOG
-       * ==================================================
-       */
-      for (const logData of logs) {
-
-        try {
-
-          /**
-           * BASIC VALIDATION
-           */
-          if (!logData?.ip) {
-            logger.warn(
-              "⚠️ Invalid log skipped"
-            );
-
-            continue;
-          }
-
-          /**
-           * ==================================================
-           * NORMALIZE LOG
-           * ==================================================
-           */
-          const processedLogData = {
-
-            ip:
-              logData.ip,
-
-            endpoint:
-              logData.endpoint || "/",
-
-            method:
-              logData.method || "GET",
-
-            requests:
-              Number(
-                logData.requests || 1
-              ),
-
-            statusCode:
-              Number(
-                logData.statusCode || 200
-              ),
-
-            bytes:
-              Number(
-                logData.bytes || 0
-              ),
-
-            user_agent:
-              logData.user_agent ||
-              "Unknown",
-
-            referrer:
-              logData.referrer || "-",
-
-            timestamp:
-              logData.timestamp ||
-              new Date().toISOString(),
-
-            user:
-              userId,
-          };
-
-          /**
-           * DEBUG
-           */
-          console.log(
-            "✅ PROCESSING:",
-            processedLogData
-          );
-
-          /**
-           * ==================================================
-           * PROCESS LOG
-           * ==================================================
-           */
-          const result =
-            await logsService.processLog(
-              processedLogData,
-              io,
-              userId
-            );
-
-          processedResults.push({
-            log: result?.log || null,
-
-            ml:
-              result?.mlResult ||
-              null,
-
-            alert:
-              result?.alert ||
-              null,
-          });
-
-          logger.info(
-            `✅ Log processed`
-          );
-
-        } catch (error) {
-
-          logger.error(
-            `❌ Failed to process log: ${error.message}`
-          );
-        }
-      }
-
-      /**
-       * ==================================================
-       * RESPONSE
-       * ==================================================
-       */
-      return apiResponse(
-        res,
-        201,
-        true,
-        {
-          totalReceived:
-            logs.length,
-
-          totalProcessed:
-            processedResults.length,
-
-          results:
-            processedResults,
-        },
-        "Logs processed successfully"
-      );
-
-    } catch (error) {
-
-      logger.error(
-        `❌ Controller Error: ${error.message}`
-      );
-
-      return apiResponse(
-        res,
-        500,
-        false,
-        null,
-        error.message
-      );
-    }
+  if (!logs?.length) {
+    return apiResponse(res, 400, false, null, "No logs provided");
   }
-);
 
-/**
- * ==================================================
- * GET LOGS
- * Multi-tenant safe
- * ==================================================
- */
-const getLogs = catchAsync(
-  async (req, res) => {
-    /**
-     * ==================================================
-     * AUTH VALIDATION
-     * ==================================================
-     */
-    if (!req.user?._id) {
-      return apiResponse(
-        res,
-        401,
-        false,
-        null,
-        "Unauthorized"
-      );
-    }
+  const jobs = [];
 
-    let logs = [];
-
+  for (const logData of logs) {
     try {
-      /**
-       * ==================================================
-       * FETCH USER LOGS ONLY
-       * ==================================================
-       */
-      if (
-        typeof logsService.getLogs ===
-        "function"
-      ) {
-        logs =
-          await logsService.getLogs(
-            req.user._id,
-            req.query
-          );
-      } else {
-        logger.warn(
-          "⚠️ logsService.getLogs is not defined"
-        );
-
-        logs = {
-          logs: [],
-
-          pagination: {
-            total: 0,
-            page: 1,
-            limit: 0,
-            pages: 0,
-          },
-        };
+      if (!logData?.ip) {
+        logger.warn("Skipped invalid log: missing IP");
+        continue;
       }
-    } catch (error) {
-      logger.error(
-        `❌ Fetch logs error: ${error.message}`
-      );
 
-      logs = {
-        logs: [],
+      const processedLogData = {
+        ip: String(logData.ip).trim(),
 
-        pagination: {
-          total: 0,
-          page: 1,
-          limit: 0,
-          pages: 0,
-        },
+        endpoint: logData.endpoint || "/",
+
+        method: String(logData.method || "GET").toUpperCase(),
+
+        requests: Number(logData.requests ?? 1),
+
+        failedLogins: Number(logData.failedLogins ?? 0),
+
+        statusCode: Number(logData.statusCode ?? 200),
+
+        bytes: Number(logData.bytes ?? 0),
+
+        user_agent: logData.user_agent || "Unknown",
+
+        referrer: logData.referrer || "-",
+
+        timestamp: logData.timestamp ? new Date(logData.timestamp) : new Date(),
+
+        user: userId,
       };
+
+      jobs.push({
+        name: "process-log",
+
+        data: processedLogData,
+
+        opts: {
+          attempts: 3,
+
+          backoff: {
+            type: "exponential",
+            delay: 3000,
+          },
+
+          removeOnComplete: 100,
+
+          removeOnFail: 50,
+
+          jobId: `${processedLogData.ip}-${Date.now()}-${Math.random()}`,
+        },
+      });
+    } catch (err) {
+      logger.error("Queue preparation failed", {
+        error: err.message,
+        stack: err.stack,
+      });
     }
-
-    /**
-     * ==================================================
-     * RESPONSE
-     * ==================================================
-     */
-    return apiResponse(
-      res,
-      200,
-      true,
-      logs,
-      "Logs fetched successfully"
-    );
   }
-);
 
-/**
- * ==================================================
- * EXPORTS
- * ==================================================
- */
-export {
-  createLog,
-  getLogs,
-};
+  if (jobs.length === 0) {
+    return apiResponse(res, 400, false, null, "No valid logs to process");
+  }
+
+  const logQueue = getLogQueue();
+
+  await logQueue.addBulk(jobs);
+
+  logger.info(`${jobs.length} logs queued`, {
+    queued: jobs.length,
+    received: logs.length,
+  });
+
+  return apiResponse(
+    res,
+    202,
+    true,
+    {
+      queued: jobs.length,
+      received: logs.length,
+    },
+    "Logs queued successfully",
+  );
+});
+
+/*
+==================================================
+GET LOGS
+==================================================
+*/
+
+const getLogs = catchAsync(async (req, res) => {
+  if (!req.user?._id) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
+
+  const logs = await logsService.getLogs(req.user._id, req.query);
+
+  return apiResponse(res, 200, true, logs, "Logs fetched successfully");
+});
+
+export { createLog, getLogs };

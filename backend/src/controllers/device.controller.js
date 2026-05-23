@@ -1,12 +1,11 @@
 import Device from "../models/device.model.js";
 
-import catchAsync from "../utils/catchAsync.js";
 import apiResponse from "../utils/apiResponse.js";
+import catchAsync from "../utils/catchAsync.js";
 
-import {
-    emitDeviceOnline
-} from "../services/realtime.service.js";
+import { generateApiKey, hashApiKey } from "../utils/deviceKey.util.js";
 
+import { emitDeviceOnline } from "../services/realtime.service.js";
 
 /**
  * ============================================
@@ -14,498 +13,313 @@ import {
  * ============================================
  */
 const getOwnerId = (req) => {
-
-    return (
-
-        req.user?._id ||
-
-        req.device?.userId ||
-
-        null
-
-    );
-
+  return req.user?._id || req.device?.userId || null;
 };
-
-
 
 /**
  * ============================================
  * REGISTER DEVICE
  * ============================================
  */
-export const registerDevice =
-    catchAsync(
-        async (
-            req,
-            res
-        ) => {
 
-            const {
+export const registerDevice = catchAsync(async (req, res) => {
+  const { deviceId, hostname, os, agentVersion, localIp, metadata } = req.body;
 
-                deviceId,
-                hostname,
-                os,
-                agentVersion,
-                localIp,
-                metadata
+  /*
+============================
+OWNER
+============================
+*/
 
-            } = req.body;
+  const ownerId = getOwnerId(req);
 
+  if (!ownerId) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
 
-            const ownerId =
-                getOwnerId(req);
+  /*
+============================
+VALIDATION
+============================
+*/
 
+  if (!deviceId || !hostname || !os) {
+    return apiResponse(res, 400, false, null, "Missing required fields");
+  }
 
-            if (
-                !ownerId
-            ) {
+  /*
+============================
+CHECK EXISTING DEVICE
+============================
+*/
 
-                return apiResponse(
+  const existingDevice = await Device.findOne({
+    deviceId,
+    userId: ownerId,
+  });
 
-                    res,
-                    401,
-                    false,
-                    null,
-                    "Unauthorized"
+  if (existingDevice) {
+    const now = new Date();
 
-                );
+    existingDevice.lastSeen = now;
 
-            }
+    existingDevice.heartbeatAt = now;
 
+    existingDevice.status = "online";
 
-            if (
-                !deviceId ||
-                !hostname ||
-                !os
-            ) {
+    existingDevice.hostname = hostname;
 
-                return apiResponse(
+    existingDevice.os = os;
 
-                    res,
-                    400,
-                    false,
-                    null,
-                    "Missing required fields"
+    existingDevice.agentVersion = agentVersion || existingDevice.agentVersion;
 
-                );
+    existingDevice.localIp = localIp || existingDevice.localIp;
 
-            }
+    existingDevice.ipAddress = req.ip;
 
+    existingDevice.metadata = {
+      ...existingDevice.metadata,
 
-            /**
-             * Prevent cross-user device collisions
-             */
-            const existingDevice =
-                await Device.findOne({
+      ...(metadata || {}),
+    };
 
-                    deviceId,
+    await existingDevice.save();
 
-                    userId:
-                        ownerId
+    emitDeviceOnline(
+      req.io,
 
-                })
-                    .select(
-                        "+apiKey"
-                    );
+      {
+        deviceId: existingDevice.deviceId,
 
+        hostname: existingDevice.hostname,
 
+        status: existingDevice.status,
 
-            if (
-                existingDevice
-            ) {
+        lastSeen: existingDevice.lastSeen,
+      },
 
-                const now =
-                    new Date();
-
-
-                existingDevice.lastSeen =
-                    now;
-
-                existingDevice.heartbeatAt =
-                    now;
-
-                existingDevice.status =
-                    "online";
-
-                existingDevice.hostname =
-                    hostname;
-
-                existingDevice.os =
-                    os;
-
-                existingDevice.agentVersion =
-
-                    agentVersion ||
-
-                    existingDevice.agentVersion;
-
-
-                existingDevice.localIp =
-
-                    localIp ||
-
-                    existingDevice.localIp;
-
-
-                existingDevice.ipAddress =
-                    req.ip;
-
-
-                existingDevice.metadata = {
-
-                    ...existingDevice.metadata,
-
-                    ...(metadata || {})
-
-                };
-
-
-                await existingDevice.save();
-
-
-                emitDeviceOnline(
-
-                    req.io,
-
-                    existingDevice,
-
-                    ownerId
-
-                );
-
-
-                return apiResponse(
-
-                    res,
-                    200,
-                    true,
-
-                    {
-
-                        deviceId:
-                            existingDevice.deviceId,
-
-                        apiKey:
-                            existingDevice.apiKey,
-
-                        status:
-                            existingDevice.status,
-
-                        reconnect: true
-
-                    },
-
-                    "Device reconnected successfully"
-
-                );
-
-            }
-
-
-            /**
-             * API key auto-generated
-             * by schema middleware
-             */
-            const now =
-                new Date();
-
-
-            const device =
-                await Device.create({
-
-                    deviceId,
-
-                    hostname,
-
-                    os,
-
-                    userId:
-                        ownerId,
-
-                    agentVersion:
-                        agentVersion ||
-                        "1.0.0",
-
-                    status:
-                        "online",
-
-                    lastSeen:
-                        now,
-
-                    heartbeatAt:
-                        now,
-
-                    ipAddress:
-                        req.ip,
-
-                    localIp:
-                        localIp || "",
-
-                    metadata: {
-
-                        architecture:
-                            metadata?.architecture || "",
-
-                        platform:
-                            metadata?.platform || "",
-
-                        cpuUsage:
-                            metadata?.cpuUsage || 0,
-
-                        memoryUsage:
-                            metadata?.memoryUsage || 0
-
-                    }
-
-                });
-
-
-            emitDeviceOnline(
-
-                req.io,
-
-                device,
-
-                ownerId
-
-            );
-
-
-            return apiResponse(
-
-                res,
-                201,
-                true,
-
-                {
-
-                    deviceId:
-                        device.deviceId,
-
-                    apiKey:
-                        device.apiKey,
-
-                    status:
-                        device.status,
-
-                    reconnect: false
-
-                },
-
-                "Device registered successfully"
-
-            );
-
-        }
+      ownerId,
     );
 
+    return apiResponse(
+      res,
+      200,
+      true,
 
+      {
+        deviceId: existingDevice.deviceId,
+
+        status: existingDevice.status,
+
+        reconnect: true,
+      },
+
+      "Device reconnected successfully",
+    );
+  }
+
+  /*
+============================
+GENERATE API KEY
+============================
+*/
+
+  const rawApiKey = generateApiKey();
+
+  const hashedApiKey = hashApiKey(rawApiKey);
+
+  const now = new Date();
+
+  /*
+============================
+CREATE DEVICE
+============================
+*/
+
+  const device = await Device.create({
+    deviceId,
+
+    hostname,
+
+    os,
+
+    userId: ownerId,
+
+    apiKey: hashedApiKey,
+
+    agentVersion: agentVersion || "1.0.0",
+
+    status: "online",
+
+    lastSeen: now,
+
+    heartbeatAt: now,
+
+    ipAddress: req.ip,
+
+    localIp: localIp || "",
+
+    metadata: {
+      architecture: metadata?.architecture || "",
+
+      platform: metadata?.platform || "",
+
+      cpuUsage: metadata?.cpuUsage || 0,
+
+      memoryUsage: metadata?.memoryUsage || 0,
+    },
+  });
+
+  /*
+============================
+REALTIME EVENT
+============================
+*/
+
+  emitDeviceOnline(
+    req.io,
+
+    {
+      deviceId: device.deviceId,
+
+      hostname: device.hostname,
+
+      status: device.status,
+
+      lastSeen: device.lastSeen,
+    },
+
+    ownerId,
+  );
+
+  /*
+============================
+RESPONSE
+============================
+*/
+
+  return apiResponse(
+    res,
+    201,
+    true,
+
+    {
+      deviceId: device.deviceId,
+
+      apiKey: rawApiKey,
+
+      status: device.status,
+
+      reconnect: false,
+    },
+
+    "Device registered successfully",
+  );
+});
 
 /**
  * ============================================
  * HEARTBEAT
  * ============================================
  */
-export const heartbeatDevice =
-    catchAsync(
-        async (
-            req,
-            res
-        ) => {
 
-            const {
+export const heartbeatDevice = catchAsync(async (req, res) => {
+  const { deviceId } = req.body;
 
-                deviceId
+  const ownerId = getOwnerId(req);
 
-            } = req.body;
+  if (!ownerId) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
 
+  if (!deviceId) {
+    return apiResponse(res, 400, false, null, "Device ID required");
+  }
 
-            const ownerId =
-                getOwnerId(req);
+  const device = await Device.findOne({
+    deviceId,
+    userId: ownerId,
+  });
 
+  if (!device) {
+    return apiResponse(res, 404, false, null, "Device not found");
+  }
 
-            if (
-                !ownerId
-            ) {
+  const now = new Date();
 
-                return apiResponse(
+  device.status = "online";
 
-                    res,
-                    401,
-                    false,
-                    null,
-                    "Unauthorized"
+  device.lastSeen = now;
 
-                );
+  device.heartbeatAt = now;
 
-            }
+  await device.save();
 
+  emitDeviceOnline(
+    req.io,
 
-            if (
-                !deviceId
-            ) {
+    {
+      deviceId: device.deviceId,
 
-                return apiResponse(
+      hostname: device.hostname,
 
-                    res,
-                    400,
-                    false,
-                    null,
-                    "Device ID required"
+      status: device.status,
 
-                );
+      lastSeen: device.lastSeen,
+    },
 
-            }
+    ownerId,
+  );
 
+  return apiResponse(
+    res,
+    200,
+    true,
 
-            const device =
-                await Device.findOne({
+    {
+      deviceId: device.deviceId,
 
-                    deviceId,
+      status: device.status,
 
-                    userId:
-                        ownerId
+      heartbeatAt: device.heartbeatAt,
+    },
 
-                });
-
-
-            if (
-                !device
-            ) {
-
-                return apiResponse(
-
-                    res,
-                    404,
-                    false,
-                    null,
-                    "Device not found"
-
-                );
-
-            }
-
-
-            const now =
-                new Date();
-
-            device.status =
-                "online";
-
-            device.lastSeen =
-                now;
-
-            device.heartbeatAt =
-                now;
-
-            await device.save();
-
-
-            emitDeviceOnline(
-
-                req.io,
-
-                device,
-
-                ownerId
-
-            );
-
-
-            return apiResponse(
-
-                res,
-                200,
-                true,
-
-                {
-
-                    deviceId:
-                        device.deviceId,
-
-                    status:
-                        device.status,
-
-                    heartbeatAt:
-                        device.heartbeatAt
-
-                },
-
-                "Heartbeat updated"
-
-            );
-
-        }
-    );
-
-
+    "Heartbeat updated",
+  );
+});
 
 /**
  * ============================================
  * GET DEVICES
  * ============================================
  */
-export const getDevices =
-    catchAsync(
-        async (
-            req,
-            res
-        ) => {
 
-            const ownerId =
-                getOwnerId(req);
+export const getDevices = catchAsync(async (req, res) => {
+  const ownerId = getOwnerId(req);
 
+  if (!ownerId) {
+    return apiResponse(res, 401, false, null, "Unauthorized");
+  }
 
-            if (
-                !ownerId
-            ) {
+  const devices = await Device.find({
+    userId: ownerId,
+  })
 
-                return apiResponse(
+    .sort({
+      updatedAt: -1,
+    })
 
-                    res,
-                    401,
-                    false,
-                    null,
-                    "Unauthorized"
+    .select("-apiKey");
 
-                );
+  return apiResponse(
+    res,
+    200,
+    true,
 
-            }
+    {
+      devices,
+    },
 
-
-            const devices =
-                await Device.find({
-
-                    userId:
-                        ownerId
-
-                })
-                    .sort({
-
-                        updatedAt: -1
-
-                    })
-                    .select(
-                        "-apiKey"
-                    );
-
-
-            return apiResponse(
-
-                res,
-                200,
-                true,
-
-                {
-
-                    devices
-
-                },
-
-                "Devices fetched"
-
-            );
-
-        }
-    );
+    "Devices fetched",
+  );
+});

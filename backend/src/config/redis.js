@@ -1,27 +1,102 @@
-import { createClient } from "redis";
+import Redis from "ioredis";
 
-let redisClient;
+let connection = null;
 
-// ================= CONNECT =================
+// ================= CREATE REDIS CONNECTION =================
+
 export const connectRedis = async () => {
   try {
-    redisClient = createClient({
-      url: process.env.REDIS_URL || "redis://redis:6379",
+
+    if (connection) {
+      return connection;
+    }
+
+    connection = new Redis({
+      host: process.env.REDIS_HOST || "localhost",
+
+      port: parseInt(
+        process.env.REDIS_PORT || "6379"
+      ),
+
+      password:
+        process.env.REDIS_PASSWORD || undefined,
+
+      maxRetriesPerRequest: null,
+
+      enableReadyCheck: false,
+
+      retryStrategy(times) {
+
+        const delay =
+          Math.min(times * 500, 5000);
+
+        console.log(
+          `Redis reconnect attempt ${times}`
+        );
+
+        return delay;
+      }
     });
 
-    redisClient.on("error", (err) => {
-      console.error("❌ Redis error:", err.message);
-    });
+    connection.on(
+      "connect",
+      () => {
 
-    await redisClient.connect();
+        console.log(
+          "✅ Redis connected"
+        );
 
-    console.log("✅ Redis connected");
+      }
+    );
+
+    connection.on(
+      "error",
+      (err) => {
+
+        console.error(
+          "❌ Redis Error:",
+          err.message
+        );
+
+      }
+    );
+
+    connection.on(
+      "close",
+      () => {
+
+        console.log(
+          "⚠ Redis connection closed"
+        );
+
+      }
+    );
+
+    return connection;
+
   } catch (error) {
-    console.error("❌ Redis connection failed:", error.message);
+
+    console.error(
+      "❌ Redis connection failed:",
+      error.message
+    );
+
+    process.exit(1);
+
   }
 };
 
-// ================= GET CLIENT =================
-export const getRedisClient = () => {
-  return redisClient;
+// ================= GET CONNECTION =================
+
+export const getRedisConnection = () => {
+
+  if (!connection) {
+
+    throw new Error(
+      "Redis not initialized"
+    );
+
+  }
+
+  return connection;
 };

@@ -1,15 +1,20 @@
 import mongoose from "mongoose";
 
-/**
- * ================= LOG SCHEMA =================
- * Multi-user SaaS safe
- */
+/*
+====================================================
+LOG SCHEMA
+Multi-tenant SaaS safe
+====================================================
+*/
+
 const logSchema = new mongoose.Schema(
   {
-    /**
-     * ================= TENANT OWNERSHIP =================
-     * CRITICAL FOR MULTI-USER ISOLATION
-     */
+    /*
+    ====================================================
+    TENANT OWNERSHIP
+    ====================================================
+    */
+
     user: {
       type: mongoose.Schema.Types.ObjectId,
 
@@ -20,17 +25,40 @@ const logSchema = new mongoose.Schema(
       index: true,
     },
 
-    /**
-     * ================= BASIC INFO =================
-     */
+    organizationId: {
+      type: mongoose.Schema.Types.ObjectId,
+
+      ref: "Organization",
+
+      default: null,
+
+      index: true,
+    },
+
+    deviceId: {
+      type: String,
+
+      default: null,
+
+      trim: true,
+    },
+
+    /*
+    ====================================================
+    BASIC REQUEST INFO
+    ====================================================
+    */
+
     ip: {
       type: String,
 
       required: true,
 
-      index: true,
-
       trim: true,
+
+      lowercase: true,
+
+      index: true,
     },
 
     requests: {
@@ -68,14 +96,27 @@ const logSchema = new mongoose.Schema(
 
       required: true,
 
-      enum: [
-        "GET",
-        "POST",
-        "PUT",
-        "DELETE",
-        "PATCH",
-        "OPTIONS",
-      ],
+      uppercase: true,
+
+      enum: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    },
+
+    statusCode: {
+      type: Number,
+
+      default: 200,
+
+      min: 100,
+
+      max: 599,
+    },
+
+    bytes: {
+      type: Number,
+
+      default: 0,
+
+      min: 0,
     },
 
     user_agent: {
@@ -86,6 +127,14 @@ const logSchema = new mongoose.Schema(
       maxlength: 500,
     },
 
+    referrer: {
+      type: String,
+
+      default: "-",
+
+      maxlength: 1000,
+    },
+
     timestamp: {
       type: Date,
 
@@ -94,9 +143,12 @@ const logSchema = new mongoose.Schema(
       index: true,
     },
 
-    /**
-     * ================= ML OUTPUT =================
-     */
+    /*
+    ====================================================
+    ML OUTPUT
+    ====================================================
+    */
+
     is_anomaly: {
       type: Boolean,
 
@@ -135,45 +187,80 @@ const logSchema = new mongoose.Schema(
     timestamps: true,
 
     strict: true,
-  }
+
+    versionKey: false,
+  },
 );
 
-/**
- * ================= PERFORMANCE INDEXES =================
- */
+/*
+====================================================
+PERFORMANCE INDEXES
+====================================================
+*/
 
-// User-specific analytics
+/*
+Dashboard queries
+*/
+
 logSchema.index({
   user: 1,
-  timestamp: -1,
+  createdAt: -1,
 });
 
-// User + IP queries
+/*
+User IP history
+*/
+
 logSchema.index({
   user: 1,
   ip: 1,
-  timestamp: -1,
+  createdAt: -1,
 });
 
-// Attack analytics
+/*
+Threat analytics
+*/
+
 logSchema.index({
   user: 1,
   attackType: 1,
-  timestamp: -1,
+  createdAt: -1,
 });
 
-// Fast anomaly queries
+/*
+Fast anomaly lookup
+*/
+
 logSchema.index({
   user: 1,
   is_anomaly: 1,
-  timestamp: -1,
+  createdAt: -1,
 });
 
-/**
- * ================= SAFE MODEL EXPORT =================
- */
-const Log =
-  mongoose.models.Log ||
-  mongoose.model("Log", logSchema);
+/*
+IP based searches
+*/
+
+logSchema.index({
+  ip: 1,
+  createdAt: -1,
+});
+
+/*
+Organization analytics
+*/
+
+logSchema.index({
+  organizationId: 1,
+  createdAt: -1,
+});
+
+/*
+====================================================
+MODEL EXPORT
+====================================================
+*/
+
+const Log = mongoose.models.Log || mongoose.model("Log", logSchema);
 
 export default Log;

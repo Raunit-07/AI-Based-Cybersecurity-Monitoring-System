@@ -1,141 +1,166 @@
 import Device from "../models/device.model.js";
+import { compareApiKey } from "../utils/deviceKey.util.js";
 
 /**
  * ==================================================
  * DEVICE AUTH MIDDLEWARE
  * ==================================================
+ *
  * Authenticates:
  * - collector agents
  * - endpoint devices
  *
- * Uses:
+ * Required Headers:
+ *
  * x-device-id
  * x-device-key
+ *
  * ==================================================
  */
-export const deviceAuthMiddleware =
-    async (req, res, next) => {
-        try {
-            /**
-             * ==========================================
-             * HEADERS
-             * ==========================================
-             */
-            const deviceId =
-                req.headers[
-                "x-device-id"
-                ];
 
-            const deviceKey =
-                req.headers[
-                "x-device-key"
-                ];
+export const deviceAuthMiddleware = async (req, res, next) => {
+  try {
+    /**
+     * ==========================================
+     * SAFE HEADER PARSING
+     * ==========================================
+     */
 
-            /**
-             * ==========================================
-             * VALIDATION
-             * ==========================================
-             */
-            if (
-                !deviceId ||
-                !deviceKey
-            ) {
-                return res.status(401).json({
-                    success: false,
+    const deviceId = String(req.headers["x-device-id"] || "").trim();
 
-                    data: null,
+    const deviceKey = String(req.headers["x-device-key"] || "").trim();
 
-                    message:
-                        "Missing device credentials",
-                });
-            }
+    /**
+     * ==========================================
+     * REQUIRED VALIDATION
+     * ==========================================
+     */
 
-            /**
-             * ==========================================
-             * FIND DEVICE
-             * ==========================================
-             */
-            const device =
-                await Device.findOne({
-                    deviceId,
-                }).select("+apiKey");
+    if (!deviceId || !deviceKey) {
+      return res.status(401).json({
+        success: false,
+        data: null,
+        message: "Missing device credentials",
+      });
+    }
 
-            /**
-             * ==========================================
-             * DEVICE NOT FOUND
-             * ==========================================
-             */
-            if (!device) {
-                return res.status(404).json({
-                    success: false,
+    /**
+     * ==========================================
+     * BASIC INPUT VALIDATION
+     * ==========================================
+     */
 
-                    data: null,
+    if (deviceId.length < 3 || deviceId.length > 255) {
+      return res.status(400).json({
+        success: false,
+        data: null,
+        message: "Invalid device ID",
+      });
+    }
 
-                    message:
-                        "Device not found",
-                });
-            }
+    /**
+     * ==========================================
+     * FIND DEVICE
+     * ==========================================
+     */
 
-            /**
-             * ==========================================
-             * INVALID KEY
-             * ==========================================
-             */
-            if (
-                device.apiKey !==
-                deviceKey
-            ) {
-                return res.status(403).json({
-                    success: false,
+    const device = await Device.findOne({
+      deviceId,
+    }).select("+apiKey");
 
-                    data: null,
+    /**
+     * ==========================================
+     * DEVICE NOT FOUND
+     * ==========================================
+     */
 
-                    message:
-                        "Invalid device key",
-                });
-            }
+    if (!device) {
+      return res.status(404).json({
+        success: false,
+        data: null,
+        message: "Device not found",
+      });
+    }
 
-            /**
-             * ==========================================
-             * INACTIVE DEVICE
-             * ==========================================
-             */
-            if (
-                device.isActive ===
-                false
-            ) {
-                return res.status(403).json({
-                    success: false,
+    /**
+     * ==========================================
+     * DEVICE STATUS CHECK
+     * ==========================================
+     */
 
-                    data: null,
+    const blockedStatuses = ["inactive", "quarantined"];
 
-                    message:
-                        "Device disabled",
-                });
-            }
+    if (blockedStatuses.includes(device.status) || device.isolated) {
+      return res.status(403).json({
+        success: false,
+        data: null,
+        message: "Device disabled",
+      });
+    }
 
-            /**
-             * ==========================================
-             * ATTACH DEVICE
-             * ==========================================
-             */
-            req.device = device;
+    /**
+     * ==========================================
+     * SECURE API KEY COMPARISON
+     * ==========================================
+     */
 
-            next();
+    const isValid = compareApiKey(device.apiKey, deviceKey);
 
-        } catch (error) {
-            console.error(
-                "❌ Device auth error:",
-                error
-            );
+    if (!isValid) {
+      return res.status(403).json({
+        success: false,
+        data: null,
+        message: "Invalid device key",
+      });
+    }
 
-            return res.status(500).json({
-                success: false,
+    /**
+     * ==========================================
+     * UPDATE LAST ACTIVE
+     * Avoid excessive writes
+     * ==========================================
+     */
 
-                data: null,
+    const now = Date.now();
 
-                message:
-                    "Device authentication failed",
-            });
-        }
-    };
+    const lastSeen = device.lastSeen ? new Date(device.lastSeen).getTime() : 0;
+
+    const updateInterval = 60 * 1000;
+
+    if (now - lastSeen > updateInterval) {
+      device.lastSeen = new Date();
+
+      device.heartbeatAt = new Date();
+
+      await device.save();
+    }
+
+    /**
+     * ==========================================
+     * REMOVE SENSITIVE DATA
+     * ==========================================
+     */
+
+    const safeDevice = device.toObject();
+
+    delete safeDevice.apiKey;
+
+    /**
+     * ==========================================
+     * ATTACH DEVICE
+     * ==========================================
+     */
+
+    req.device = safeDevice;
+
+    return next();
+  } catch (error) {
+    console.error("❌ Device auth error:", error);
+
+    return res.status(500).json({
+      success: false,
+      data: null,
+      message: "Device authentication failed",
+    });
+  }
+};

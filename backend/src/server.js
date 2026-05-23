@@ -4,24 +4,22 @@ dotenv.config();
 import dns from "dns";
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
 
+import cookie from "cookie";
 import http from "http";
 import jwt from "jsonwebtoken";
-import cookie from "cookie";
-
-import app from "./app.js";
-import connectDB from "./config/db.js";
-import logger from "./utils/logger.js";
 
 import { Server } from "socket.io";
-
+import app from "./app.js";
+import connectDB from "./config/db.js";
+import { connectRedis } from "./config/redis.js";
 import { verifyEmailService } from "./integrations/email.js";
+import logger from "./utils/logger.js";
+import { initLogWorker } from "./jobs/logWorker.js";
 // import { startLogWatcher } from "./services/logWatcher.service.js";
 
 const PORT = process.env.PORT || 5000;
 
-const FRONTEND_URL =
-  process.env.FRONTEND_URL ||
-  "http://localhost:5173";
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:5173";
 
 /**
  * ================= SERVER SETUP =================
@@ -40,10 +38,7 @@ const io = new Server(server, {
     credentials: true,
   },
 
-  transports: [
-    "websocket",
-    "polling",
-  ],
+  transports: ["websocket", "polling"],
 
   pingTimeout: 60000,
 
@@ -59,85 +54,48 @@ io.use(async (socket, next) => {
     /**
      * ================= READ COOKIES =================
      */
-    const rawCookies =
-      socket.handshake.headers
-        ?.cookie;
+    const rawCookies = socket.handshake.headers?.cookie;
 
     if (!rawCookies) {
-      return next(
-        new Error(
-          "Unauthorized"
-        )
-      );
+      return next(new Error("Unauthorized"));
     }
 
     /**
      * ================= PARSE COOKIES =================
      */
-    const parsedCookies =
-      cookie.parse(rawCookies);
+    const parsedCookies = cookie.parse(rawCookies);
 
-    const token =
-      parsedCookies
-        ?.accessToken;
+    const token = parsedCookies?.accessToken;
 
     if (!token) {
-      return next(
-        new Error(
-          "Unauthorized"
-        )
-      );
+      return next(new Error("Unauthorized"));
     }
 
     /**
      * ================= VERIFY JWT =================
      */
-    if (
-      !process.env
-        .JWT_ACCESS_SECRET
-    ) {
-      return next(
-        new Error(
-          "JWT secret missing"
-        )
-      );
+    if (!process.env.JWT_ACCESS_SECRET) {
+      return next(new Error("JWT secret missing"));
     }
 
-    const decoded =
-      jwt.verify(
-        token,
-        process.env
-          .JWT_ACCESS_SECRET
-      );
+    const decoded = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
 
     if (!decoded?.id) {
-      return next(
-        new Error(
-          "Invalid token payload"
-        )
-      );
+      return next(new Error("Invalid token payload"));
     }
 
     /**
      * ================= ATTACH USER =================
      */
-    socket.userId =
-      decoded.id;
+    socket.userId = decoded.id;
 
-    socket.userRole =
-      decoded.role;
+    socket.userRole = decoded.role;
 
     next();
   } catch (err) {
-    logger.error(
-      `Socket auth error: ${err.message}`
-    );
+    logger.error(`Socket auth error: ${err.message}`);
 
-    return next(
-      new Error(
-        "Socket authentication failed"
-      )
-    );
+    return next(new Error("Socket authentication failed"));
   }
 });
 
@@ -145,20 +103,14 @@ io.use(async (socket, next) => {
  * ================= SOCKET EVENTS =================
  */
 io.on("connection", (socket) => {
-  logger.info(
-    `Socket connected: ${socket.id} | User: ${socket.userId}`
-  );
+  logger.info(`Socket connected: ${socket.id} | User: ${socket.userId}`);
 
   /**
    * ================= USER ROOM =================
    */
-  socket.join(
-    socket.userId.toString()
-  );
+  socket.join(socket.userId.toString());
 
-  logger.info(
-    `User ${socket.userId} joined private room`
-  );
+  logger.info(`User ${socket.userId} joined private room`);
 
   /**
    * ================= HEALTH CHECK =================
@@ -170,26 +122,16 @@ io.on("connection", (socket) => {
   /**
    * ================= DISCONNECT =================
    */
-  socket.on(
-    "disconnect",
-    (reason) => {
-      logger.info(
-        `Socket disconnected: ${socket.id} | Reason: ${reason}`
-      );
-    }
-  );
+  socket.on("disconnect", (reason) => {
+    logger.info(`Socket disconnected: ${socket.id} | Reason: ${reason}`);
+  });
 
   /**
    * ================= SOCKET ERROR =================
    */
-  socket.on(
-    "error",
-    (err) => {
-      logger.error(
-        `Socket error (${socket.id}): ${err.message}`
-      );
-    }
-  );
+  socket.on("error", (err) => {
+    logger.error(`Socket error (${socket.id}): ${err.message}`);
+  });
 });
 
 /**
@@ -202,105 +144,73 @@ global.io = io;
 /**
  * ================= SERVER INSTANCE =================
  */
-let serverInstance =
-  null;
+let serverInstance = null;
 
 /**
  * ================= START SERVER =================
  */
-const startServer =
-  async () => {
+const startServer = async () => {
+  try {
+    /**
+     * ================= DATABASE =================
+     */
+    await connectDB();
+
+    logger.info("Database connected");
+
+    /**
+     * ================= EMAIL =================
+     */
     try {
+      setTimeout(() => {
+        verifyEmailService();
+      }, 8000);
+
+      logger.info("Email service verified");
+    } catch (emailError) {
+      logger.warn(`Email verification failed: ${emailError.message}`);
+    }
+    await connectRedis();
+    
+    initLogWorker(io);
+    /**
+     * ================= START SERVER =================
+     */
+    serverInstance = server.listen(PORT, () => {
+      logger.info(`Server running on port ${PORT}`);
+
+      logger.info(`Frontend allowed: ${FRONTEND_URL}`);
+
+      logger.info("Socket.IO ready");
+
       /**
-       * ================= DATABASE =================
+       * ================= LOG WATCHER =================
        */
-      await connectDB();
+      // startLogWatcher(
+      //   io
+      // );
 
-      logger.info(
-        "Database connected"
-      );
+      logger.info("Real log watcher started");
+    });
 
-      /**
-       * ================= EMAIL =================
-       */
-      try {
-        setTimeout(() => {
-          verifyEmailService();
-        }, 8000);
-
-        logger.info(
-          "Email service verified"
-        );
-      } catch (
-      emailError
-      ) {
-        logger.warn(
-          `Email verification failed: ${emailError.message}`
-        );
+    /**
+     * ================= SERVER ERRORS =================
+     */
+    serverInstance.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        logger.error(`Port ${PORT} already in use`);
+      } else {
+        logger.error(`Server error: ${err.message}`);
       }
 
-      /**
-       * ================= START SERVER =================
-       */
-      serverInstance =
-        server.listen(
-          PORT,
-          () => {
-            logger.info(
-              `Server running on port ${PORT}`
-            );
-
-            logger.info(
-              `Frontend allowed: ${FRONTEND_URL}`
-            );
-
-            logger.info(
-              "Socket.IO ready"
-            );
-
-            /**
-             * ================= LOG WATCHER =================
-             */
-            // startLogWatcher(
-            //   io
-            // );
-
-            logger.info(
-              "Real log watcher started"
-            );
-          }
-        );
-
-      /**
-       * ================= SERVER ERRORS =================
-       */
-      serverInstance.on(
-        "error",
-        (err) => {
-          if (
-            err.code ===
-            "EADDRINUSE"
-          ) {
-            logger.error(
-              `Port ${PORT} already in use`
-            );
-          } else {
-            logger.error(
-              `Server error: ${err.message}`
-            );
-          }
-
-          process.exit(1);
-        }
-      );
-    } catch (error) {
-      logger.error(
-        `Failed to start server: ${error.message}`
-      );
-
       process.exit(1);
-    }
-  };
+    });
+  } catch (error) {
+    logger.error(`Failed to start server: ${error.message}`);
+
+    process.exit(1);
+  }
+};
 
 startServer();
 
@@ -308,61 +218,36 @@ startServer();
  * ================= GRACEFUL SHUTDOWN =================
  */
 const shutdown = () => {
-  logger.info(
-    "Graceful shutdown initiated"
-  );
+  logger.info("Graceful shutdown initiated");
 
   if (serverInstance) {
-    serverInstance.close(
-      () => {
-        logger.info(
-          "Server closed"
-        );
+    serverInstance.close(() => {
+      logger.info("Server closed");
 
-        process.exit(0);
-      }
-    );
+      process.exit(0);
+    });
   } else {
     process.exit(0);
   }
 };
 
-process.on(
-  "SIGINT",
-  shutdown
-);
+process.on("SIGINT", shutdown);
 
-process.on(
-  "SIGTERM",
-  shutdown
-);
+process.on("SIGTERM", shutdown);
 
 /**
  * ================= GLOBAL ERROR HANDLING =================
  */
-process.on(
-  "unhandledRejection",
-  (err) => {
-    logger.error(
-      `Unhandled Rejection: ${err.message}`
-    );
+process.on("unhandledRejection", (err) => {
+  logger.error(`Unhandled Rejection: ${err.message}`);
 
-    shutdown();
-  }
-);
+  shutdown();
+});
 
-process.on(
-  "uncaughtException",
-  (err) => {
-    logger.error(
-      `Uncaught Exception: ${err.message}`
-    );
+process.on("uncaughtException", (err) => {
+  logger.error(`Uncaught Exception: ${err.message}`);
 
-    shutdown();
-  }
-);
+  shutdown();
+});
 
-export {
-  serverInstance as server,
-  io,
-};
+export { io, serverInstance as server };
