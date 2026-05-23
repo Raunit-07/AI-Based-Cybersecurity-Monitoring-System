@@ -4,6 +4,8 @@ import {
     registerDevice,
     heartbeatDevice,
     getDevices,
+    getDeviceById,
+    updateDevice,
 } from "../controllers/device.controller.js";
 
 import {
@@ -104,10 +106,20 @@ router.post(
  * ==================================================
  */
 router.get(
-    "/",
-
+    "/:id",
     authMiddleware,
+    getDeviceById
+);
 
+router.patch(
+    "/:id",
+    authMiddleware,
+    updateDevice
+);
+
+router.get(
+    "/",
+    authMiddleware,
     getDevices
 );
 
