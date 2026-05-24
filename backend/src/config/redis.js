@@ -16,9 +16,13 @@ export const connectRedis = async () => {
     console.log(`🔍 Using Redis URL: ${redisUrl}`);
 
     connection = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
+      // REQUIRED for BullMQ
+      maxRetriesPerRequest: null,
+
       enableReadyCheck: true,
+
       lazyConnect: true,
+
       connectTimeout: 10000,
 
       retryStrategy(times) {
