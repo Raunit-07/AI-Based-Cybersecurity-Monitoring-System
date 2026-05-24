@@ -6,34 +6,50 @@ let connection = null;
 
 export const connectRedis = async () => {
   try {
+    // Return existing instance if already initialized
     if (connection) {
       return connection;
     }
 
-    // Prefer REDIS_URL if provided
+    // Priority:
+    // 1. REDIS_URL (Render / cloud)
+    // 2. REDIS_HOST + REDIS_PORT
+    // 3. Docker local service name
     const redisUrl =
       process.env.REDIS_URL ||
-      `redis://${process.env.REDIS_HOST || "redis"}:${process.env.REDIS_PORT || 6379}`;
+      `redis://${process.env.REDIS_HOST || "redis"}:${
+        process.env.REDIS_PORT || 6379
+      }`;
+
+    console.log(`🔍 Connecting Redis → ${redisUrl}`);
 
     connection = new Redis(redisUrl, {
       password: process.env.REDIS_PASSWORD || undefined,
 
-      maxRetriesPerRequest: null,
+      // Prevent request queue hanging forever
+      maxRetriesPerRequest: 3,
 
+      // Wait for Redis readiness
       enableReadyCheck: true,
 
+      // Connect only when called
       lazyConnect: true,
+
+      // Keep TCP connection alive
+      keepAlive: 30000,
+
+      connectTimeout: 10000,
 
       retryStrategy(times) {
         const delay = Math.min(times * 500, 5000);
 
-        console.log(`Redis reconnect attempt ${times}`);
+        console.log(`⚠ Redis reconnect attempt ${times} (delay: ${delay}ms)`);
 
         return delay;
       },
     });
 
-    // Explicit connection attempt
+    // Explicit connect
     await connection.connect();
 
     connection.on("connect", () => {
@@ -52,10 +68,16 @@ export const connectRedis = async () => {
       console.log("⚠ Redis connection closed");
     });
 
+    connection.on("reconnecting", () => {
+      console.log("🔄 Redis reconnecting...");
+    });
+
     return connection;
   } catch (error) {
     console.error("❌ Redis connection failed:", error.message);
 
+    // Do NOT kill backend in production
+    // Allow degraded mode
     return null;
   }
 };
@@ -64,7 +86,9 @@ export const connectRedis = async () => {
 
 export const getRedisConnection = () => {
   if (!connection) {
-    throw new Error("Redis not initialized");
+    console.warn("⚠ Redis unavailable - running in degraded mode");
+
+    return null;
   }
 
   return connection;
