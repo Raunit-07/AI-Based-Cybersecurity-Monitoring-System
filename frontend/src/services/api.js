@@ -5,9 +5,12 @@ import axios from "axios";
  * AXIOS INSTANCE
  * ================================
  */
-const BASE_URL =
+const rawBaseUrl =
   import.meta.env.VITE_API_URL ||
   "http://localhost:5000/api";
+const BASE_URL = rawBaseUrl.endsWith("/api")
+  ? rawBaseUrl
+  : `${rawBaseUrl.replace(/\/$/, "")}/api`;
 
 /**
  * ================================
