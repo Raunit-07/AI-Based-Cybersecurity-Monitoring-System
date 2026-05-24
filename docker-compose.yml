@@ -1,37 +1,71 @@
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=${VITE_API_URL:-http://localhost:5000/api}
     container_name: frontend
     ports:
       - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
     container_name: backend
     ports:
       - "5000:5000"
-    env_file:
-      - ./backend/.env
+    environment:
+      - PORT=5000
+      - NODE_ENV=${NODE_ENV:-development}
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/threatops}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET:-dev_jwt_access_secret_987654321}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-dev_jwt_refresh_secret_123456789}
+      - JWT_ACCESS_EXPIRES_IN=${JWT_ACCESS_EXPIRES_IN:-1d}
+      - JWT_REFRESH_EXPIRES_IN=${JWT_REFRESH_EXPIRES_IN:-7d}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - CLIENT_URLS=${CLIENT_URLS:-http://localhost:5173,http://localhost:5174}
+      - ML_SERVICE_URL=${ML_SERVICE_URL:-http://ml-service:8000}
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - ALERT_EMAIL=${ALERT_EMAIL}
+      - LOG_API_KEY=${LOG_API_KEY:-dev_log_api_key_12345}
+      - LOG_API_URL=${LOG_API_URL:-http://localhost:5000/api/logs}
+      - SIMULATION_INTERVAL=${SIMULATION_INTERVAL:-3000}
     depends_on:
-      # - mongo
-      - redis
-      - ml-service
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ml-service:
+        condition: service_healthy
 
   ml-service:
-    build: ./ml-service
+    build:
+      context: ./ml-service
     container_name: ml-service
     ports:
       - "8000:8000"
+    environment:
+      - DEBUG_MODE=True
+      - MODEL_PATH=artifacts/model.joblib
+      - RATE_LIMIT=100/minute
 
-  # mongo:
-  #   image: mongo:6
-  #   container_name: mongo
-  #   ports:
-  #     - "27017:27017"
-  #   volumes:
-  #     - mongo-data:/data/db
+  mongo:
+    image: mongo:6
+    container_name: mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.runCommand({ping:1})"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7
@@ -39,6 +73,11 @@ services:
     ports:
       - "6379:6379"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   mongo-data:

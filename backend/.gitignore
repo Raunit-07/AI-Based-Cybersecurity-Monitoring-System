@@ -3,3 +3,8 @@ node_modules
 .md 
 login.json
 dropindex.js    
+
+.env
+.env.local
+.env.production.local
+.env.staging.local

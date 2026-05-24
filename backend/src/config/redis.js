@@ -6,81 +6,57 @@ let connection = null;
 
 export const connectRedis = async () => {
   try {
-
     if (connection) {
       return connection;
     }
 
-    connection = new Redis({
-      host: process.env.REDIS_HOST || "localhost",
+    // Prefer REDIS_URL if provided
+    const redisUrl =
+      process.env.REDIS_URL ||
+      `redis://${process.env.REDIS_HOST || "redis"}:${process.env.REDIS_PORT || 6379}`;
 
-      port: parseInt(
-        process.env.REDIS_PORT || "6379"
-      ),
-
-      password:
-        process.env.REDIS_PASSWORD || undefined,
+    connection = new Redis(redisUrl, {
+      password: process.env.REDIS_PASSWORD || undefined,
 
       maxRetriesPerRequest: null,
 
-      enableReadyCheck: false,
+      enableReadyCheck: true,
+
+      lazyConnect: true,
 
       retryStrategy(times) {
+        const delay = Math.min(times * 500, 5000);
 
-        const delay =
-          Math.min(times * 500, 5000);
-
-        console.log(
-          `Redis reconnect attempt ${times}`
-        );
+        console.log(`Redis reconnect attempt ${times}`);
 
         return delay;
-      }
+      },
     });
 
-    connection.on(
-      "connect",
-      () => {
+    // Explicit connection attempt
+    await connection.connect();
 
-        console.log(
-          "✅ Redis connected"
-        );
+    connection.on("connect", () => {
+      console.log("✅ Redis connected");
+    });
 
-      }
-    );
+    connection.on("ready", () => {
+      console.log("🚀 Redis ready");
+    });
 
-    connection.on(
-      "error",
-      (err) => {
+    connection.on("error", (err) => {
+      console.error("❌ Redis Error:", err.message);
+    });
 
-        console.error(
-          "❌ Redis Error:",
-          err.message
-        );
-
-      }
-    );
-
-    connection.on(
-      "close",
-      () => {
-
-        console.log(
-          "⚠ Redis connection closed"
-        );
-
-      }
-    );
+    connection.on("close", () => {
+      console.log("⚠ Redis connection closed");
+    });
 
     return connection;
-
   } catch (error) {
+    console.error("❌ Redis connection failed:", error.message);
 
-    console.error(
-      "❌ Redis connection failed:",
-      error.message
-    );
-    process.exit(1);
+    return null;
   }
 };
 
@@ -90,5 +66,6 @@ export const getRedisConnection = () => {
   if (!connection) {
     throw new Error("Redis not initialized");
   }
+
   return connection;
 };
