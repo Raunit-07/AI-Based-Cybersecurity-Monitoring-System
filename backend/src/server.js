@@ -15,6 +15,7 @@ import { connectRedis } from "./config/redis.js";
 import { verifyEmailService } from "./integrations/email.js";
 import logger from "./utils/logger.js";
 import { initLogWorker } from "./jobs/logWorker.js";
+import { initTelemetryWorker } from "./jobs/telemetryWorker.js";
 // import { startLogWatcher } from "./services/logWatcher.service.js";
 
 const PORT = process.env.PORT || 5000;
@@ -173,6 +174,7 @@ const startServer = async () => {
     await connectRedis();
     
     initLogWorker(io);
+    initTelemetryWorker(io);
     /**
      * ================= START SERVER =================
      */

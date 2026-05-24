@@ -168,6 +168,12 @@ export const Dashboard = () => {
                         />
                       </div>
                       <p className="text-xs text-gray-400 mt-1">OS: {d.os || "Unknown"}</p>
+                      {d.metadata && (
+                        <div className="mt-2 text-xs text-gray-400 flex gap-4">
+                          <span>CPU: {d.metadata.cpuUsage ?? d.metadata.systemInfo?.cpuUsage ?? 0}%</span>
+                          <span>RAM: {d.metadata.memoryUsage ?? d.metadata.systemInfo?.memoryUsage ?? 0}%</span>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-4 flex items-center justify-between text-[11px] text-gray-500">
                       <span>Seen: {d.lastSeen ? new Date(d.lastSeen).toLocaleTimeString() : "Never"}</span>

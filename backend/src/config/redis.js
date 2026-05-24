@@ -6,31 +6,31 @@ export const connectRedis = async () => {
   try {
     if (connection) return connection;
 
-    const redisUrl = process.env.REDIS_URL;
+    let redisUrl = process.env.REDIS_URL;
 
     if (!redisUrl) {
-      console.warn("⚠ REDIS_URL missing - Redis disabled");
-      return null;
+      if (process.env.NODE_ENV === "development") {
+        redisUrl = "redis://localhost:6379";
+      } else {
+        redisUrl = "redis://redis:6379";
+      }
     }
 
     console.log(`🔍 Using Redis URL: ${redisUrl}`);
 
     connection = new Redis(redisUrl, {
-      // REQUIRED for BullMQ
       maxRetriesPerRequest: null,
-
       enableReadyCheck: true,
-
       lazyConnect: true,
-
-      connectTimeout: 10000,
+      connectTimeout: 5000,
 
       retryStrategy(times) {
-        const delay = Math.min(times * 500, 5000);
+        if (times > 10) {
+          console.warn("⚠ Redis unavailable → degraded mode");
+          return null;
+        }
 
-        console.log(`Redis reconnect attempt ${times}`);
-
-        return delay;
+        return Math.min(times * 500, 3000);
       },
     });
 
@@ -46,20 +46,14 @@ export const connectRedis = async () => {
       console.error("❌ Redis Error:", err.message);
     });
 
-    connection.on("close", () => {
-      console.log("⚠ Redis connection closed");
-    });
-
     await connection.connect();
 
     return connection;
   } catch (err) {
-    console.error("❌ Redis connection failed:", err.message);
-
+    console.error("❌ Redis startup failed:", err.message);
+    connection = null;
     return null;
   }
 };
 
-export const getRedisConnection = () => {
-  return connection;
-};
+export const getRedisConnection = () => connection;

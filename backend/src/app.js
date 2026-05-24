@@ -9,6 +9,7 @@ import authRoutes from "./routes/auth.routes.js";
 import logsRoutes from "./routes/logs.routes.js";
 import alertRoutes from "./routes/alerts.routes.js";
 import devicesRoutes from "./routes/device.routes.js";
+import telemetryRoutes from "./routes/telemetry.routes.js";
 import alertsController from "./controllers/alerts.controller.js";
 
 import { authMiddleware } from "./middlewares/auth.middleware.js";
@@ -287,6 +288,7 @@ app.use(
   "/api/devices",
   devicesRoutes
 );
+app.use("/api/telemetry", telemetryRoutes);
 
 app.get("/api/ips", authMiddleware, alertsController.getSuspiciousIPs);
 

@@ -94,7 +94,6 @@ const createLog = catchAsync(async (req, res) => {
   }
 
   const logQueue = getLogQueue();
-
   await logQueue.addBulk(jobs);
 
   logger.info(`${jobs.length} logs queued`, {

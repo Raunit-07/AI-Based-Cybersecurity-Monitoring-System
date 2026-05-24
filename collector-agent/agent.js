@@ -9,7 +9,9 @@ import { parseNginxLog } from "./parser.js";
 import {
   sendLogs,
   sendHeartbeat,
+  sendTelemetry,
 } from "./sender.js";
+import { collectSystemInfo, collectProcesses } from "./collector.js";
 
 /**
  * ==================================================
@@ -144,6 +146,37 @@ const startHeartbeatLoop =
  * ==================================================
  */
 startHeartbeatLoop();
+
+/**
+ * ==================================================
+ * TELEMETRY LOOP
+ * ==================================================
+ */
+const startTelemetryLoop = () => {
+  const runTelemetryCollection = async () => {
+    try {
+      logger.info("⚡ Collecting telemetry...");
+      const systemInfo = await collectSystemInfo();
+      const allProcesses = await collectProcesses();
+      const processes = allProcesses.slice(0, 20);
+
+      await sendTelemetry({
+        systemInfo,
+        processes,
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) {
+      logger.error(`❌ Telemetry loop error: ${error.message}`);
+    }
+  };
+
+  // Run immediately, then every 5 seconds
+  runTelemetryCollection();
+  setInterval(runTelemetryCollection, 5000);
+  logger.info("⚡ Telemetry loop started (every 5 seconds)");
+};
+
+startTelemetryLoop();
 
 /**
  * ==================================================

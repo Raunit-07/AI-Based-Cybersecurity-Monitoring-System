@@ -289,3 +289,20 @@ export const sendHeartbeat =
       );
     }
   };
+
+/**
+ * ==================================================
+ * SEND TELEMETRY
+ * ==================================================
+ */
+export const sendTelemetry = async (telemetry) => {
+  try {
+    const response = await api.post("/api/telemetry/ingest", telemetry);
+    logger.info("⚡ Telemetry sent");
+    return response.data;
+  } catch (error) {
+    const errorMsg = error.response?.data?.message || error.message;
+    logger.error(`❌ Failed to send telemetry: ${errorMsg}`);
+    throw new Error(errorMsg);
+  }
+};
