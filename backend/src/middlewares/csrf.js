@@ -1,7 +1,3 @@
-/**
- * CSRF Protection Middleware
- * Enforces Origin/Referer matching on state-changing cookie-authenticated requests.
- */
 
 export const csrfProtection = (req, res, next) => {
   const safeMethods = ["GET", "HEAD", "OPTIONS"];

@@ -1,17 +1,18 @@
 import chokidar from "chokidar";
 import fs from "fs";
 
-import config from "./config.js";
+import config, { saveCredentialsToEnv } from "./config.js";
 import logger from "./logger.js";
 
 import { parseNginxLog } from "./parser.js";
 
+import { collectProcesses, collectSystemInfo } from "./collector.js";
 import {
-  sendLogs,
+  registerDevice,
   sendHeartbeat,
+  sendLogs,
   sendTelemetry,
 } from "./sender.js";
-import { collectSystemInfo, collectProcesses } from "./collector.js";
 
 /**
  * ==================================================
@@ -142,13 +143,6 @@ const startHeartbeatLoop =
 
 /**
  * ==================================================
- * START HEARTBEAT
- * ==================================================
- */
-startHeartbeatLoop();
-
-/**
- * ==================================================
  * TELEMETRY LOOP
  * ==================================================
  */
@@ -176,7 +170,44 @@ const startTelemetryLoop = () => {
   logger.info("⚡ Telemetry loop started (every 5 seconds)");
 };
 
-startTelemetryLoop();
+/**
+ * ==================================================
+ * INITIALIZE AGENT
+ * ==================================================
+ */
+const initializeAgent = async () => {
+  try {
+    if (!config.deviceKey) {
+      logger.info("🔑 Device credentials not found. Initiating registration...");
+      const registerRes = await registerDevice();
+
+      if (registerRes && registerRes.success && registerRes.data) {
+        const { deviceId, apiKey } = registerRes.data;
+        saveCredentialsToEnv(deviceId, apiKey);
+
+        // Update config in memory
+        config.deviceId = deviceId;
+        config.deviceKey = apiKey;
+
+        logger.info("✅ Device successfully registered and credentials saved to .env");
+      } else {
+        logger.error("❌ Registration failed: Invalid response structure from backend");
+        process.exit(1);
+      }
+    } else {
+      logger.info("🔑 Reusing existing device credentials from .env");
+    }
+
+    // Start loops after successful registration check
+    startHeartbeatLoop();
+    startTelemetryLoop();
+  } catch (error) {
+    logger.error(`❌ Startup initialization failed: ${error.message}`);
+    process.exit(1);
+  }
+};
+
+initializeAgent();
 
 /**
  * ==================================================

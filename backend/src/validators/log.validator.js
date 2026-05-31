@@ -4,6 +4,13 @@ export const logValidator = [
   // Validate root payload
   body().isObject().withMessage("Payload must be a valid object"),
 
+  // Validate logs array
+  body("logs")
+    .exists()
+    .withMessage("logs array is required")
+    .isArray()
+    .withMessage("logs must be an array"),
+
   // IP address
   body("logs.*.ip")
     .exists()
@@ -14,7 +21,7 @@ export const logValidator = [
     .trim(),
 
   // Request count
-  body("requests")
+  body("logs.*.requests")
     .exists()
     .withMessage("Requests field is required")
     .bail()
@@ -26,7 +33,7 @@ export const logValidator = [
     .toInt(),
 
   // Failed logins
-  body("failedLogins")
+  body("logs.*.failedLogins")
     .optional()
     .isInt({
       min: 0,
@@ -36,7 +43,7 @@ export const logValidator = [
     .toInt(),
 
   // Endpoint
-  body("endpoint")
+  body("logs.*.endpoint")
     .exists()
     .withMessage("Endpoint is required")
     .bail()
@@ -50,7 +57,7 @@ export const logValidator = [
     .withMessage("Endpoint length must be between 1 and 500"),
 
   // HTTP Method
-  body("method")
+  body("logs.*.method")
     .exists()
     .withMessage("HTTP Method is required")
     .bail()
@@ -60,7 +67,7 @@ export const logValidator = [
     .withMessage("Invalid HTTP method"),
 
   // Status code
-  body("statusCode")
+  body("logs.*.statusCode")
     .optional()
     .isInt({
       min: 100,
@@ -70,7 +77,7 @@ export const logValidator = [
     .toInt(),
 
   // User agent
-  body("user_agent")
+  body("logs.*.user_agent")
     .optional()
     .trim()
     .isString()
@@ -81,7 +88,7 @@ export const logValidator = [
     .withMessage("User agent too long"),
 
   // Referrer
-  body("referrer")
+  body("logs.*.referrer")
     .optional()
     .trim()
     .isLength({
@@ -90,7 +97,7 @@ export const logValidator = [
     .withMessage("Referrer too long"),
 
   // Timestamp
-  body("timestamp")
+  body("logs.*.timestamp")
     .optional()
     .isISO8601()
     .withMessage("Timestamp must be valid ISO8601")

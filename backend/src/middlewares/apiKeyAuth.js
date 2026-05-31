@@ -1,3 +1,4 @@
+console.log("🔥 APIKEY AUTH MIDDLEWARE LOADED");
 import User from "../models/User.js";
 
 /**

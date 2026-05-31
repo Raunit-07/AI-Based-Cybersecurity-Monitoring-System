@@ -1,18 +1,11 @@
-import dotenv from "dotenv";
-
-import os from "os";
-
 import crypto from "crypto";
-
-// ================= LOAD ENV =================
+import dotenv from "dotenv";
+import fs from "fs";
+import os from "os";
+import path from "path";
 dotenv.config();
 
-/**
- * ==================================================
- * DEVICE ID GENERATION
- * ==================================================
- * Creates stable unique device fingerprint
- */
+
 export const generateDeviceId =
   () => {
     const raw =
@@ -24,13 +17,30 @@ export const generateDeviceId =
       .digest("hex");
   };
 
-/**
- * ==================================================
- * PRIORITY:
- * 1. CLI ARGUMENT
- * 2. ENV VARIABLE
- * ==================================================
- */
+
+export const saveCredentialsToEnv = (deviceId, deviceKey) => {
+  const envPath = path.resolve(process.cwd(), ".env");
+  if (!fs.existsSync(envPath)) {
+    fs.writeFileSync(envPath, `DEVICE_ID=${deviceId}\nDEVICE_KEY=${deviceKey}\n`, "utf8");
+    return;
+  }
+  let content = fs.readFileSync(envPath, "utf8");
+
+  if (content.includes("DEVICE_ID=")) {
+    content = content.replace(/DEVICE_ID=.*/, `DEVICE_ID=${deviceId}`);
+  } else {
+    content += `\nDEVICE_ID=${deviceId}`;
+  }
+
+  if (content.includes("DEVICE_KEY=")) {
+    content = content.replace(/DEVICE_KEY=.*/, `DEVICE_KEY=${deviceKey}`);
+  } else {
+    content += `\nDEVICE_KEY=${deviceKey}`;
+  }
+
+  fs.writeFileSync(envPath, content, "utf8");
+};
+
 const apiKey =
   process.argv[2] ||
   process.env.LOG_API_KEY;
@@ -39,11 +49,6 @@ const logFilePath =
   process.argv[3] ||
   process.env.LOG_FILE_PATH;
 
-/**
- * ==================================================
- * CONFIG OBJECT
- * ==================================================
- */
 const config = {
   // ================= BACKEND =================
   backendUrl:
@@ -58,6 +63,11 @@ const config = {
   deviceId:
     process.env.DEVICE_ID ||
     generateDeviceId(),
+
+  deviceKey:
+    process.env.DEVICE_KEY ||
+    process.env.DEVICE_SECRET ||
+    "",
 
   hostname:
     os.hostname(),

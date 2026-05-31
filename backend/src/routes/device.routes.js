@@ -1,10 +1,10 @@
 import express from "express";
 
 import {
-    registerDevice,
-    heartbeatDevice,
-    getDevices,
     getDeviceById,
+    getDevices,
+    heartbeatDevice,
+    registerDevice,
     updateDevice,
 } from "../controllers/device.controller.js";
 
@@ -16,19 +16,11 @@ import {
     deviceAuthMiddleware,
 } from "../middlewares/deviceAuth.middleware.js";
 
+import { apiKeyAuth } from "../middlewares/apiKeyAuth.js";
+
 const router =
     express.Router();
 
-/**
- * ==================================================
- * HEALTH CHECK
- * ==================================================
- * Used for:
- * - Render health monitoring
- * - Docker healthcheck
- * - API verification
- * ==================================================
- */
 router.get(
     "/health",
 
@@ -53,40 +45,13 @@ router.get(
     }
 );
 
-/**
- * ==================================================
- * REGISTER DEVICE
- * ==================================================
- * Protected Route
- *
- * Browser-authenticated users
- * can register endpoint devices.
- *
- * Used during:
- * - first-time device enrollment
- * - endpoint onboarding
- * ==================================================
- */
+
 router.post(
-    "/register",
-
-    authMiddleware,
-
-    registerDevice
+   "/register",
+   apiKeyAuth,
+   registerDevice
 );
 
-/**
- * ==================================================
- * DEVICE HEARTBEAT
- * ==================================================
- * Used by:
- * - collector-agent
- * - endpoint daemon
- *
- * Auth:
- * x-device-key
- * ==================================================
- */
 router.post(
     "/heartbeat",
 
@@ -95,16 +60,6 @@ router.post(
     heartbeatDevice
 );
 
-/**
- * ==================================================
- * GET USER DEVICES
- * ==================================================
- * Returns ONLY devices
- * belonging to authenticated user.
- *
- * Multi-tenant safe.
- * ==================================================
- */
 router.get(
     "/:id",
     authMiddleware,
