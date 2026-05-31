@@ -3,7 +3,7 @@ import React, {
     useState,
 } from "react";
 
-import API from "../services/api";
+import { fetchDevices as apiFetchDevices } from "../services/api";
 
 /**
  * ==================================================
@@ -22,28 +22,16 @@ const Devices = () => {
      * FETCH DEVICES
      * ==================================================
      */
-    const fetchDevices =
-        async () => {
-            try {
-                const response =
-                    await API.get(
-                        "/devices"
-                    );
-
-                const deviceList =
-                    response?.data
-                        ?.devices || [];
-
-                setDevices(deviceList);
-            } catch (error) {
-                console.error(
-                    "❌ Failed to fetch devices:",
-                    error
-                );
-            } finally {
-                setLoading(false);
-            }
-        };
+    const fetchDevices = async () => {
+    try {
+        const deviceList = await apiFetchDevices();
+        setDevices(deviceList);
+    } catch (error) {
+        console.error("❌ Failed to fetch devices:", error);
+    } finally {
+        setLoading(false);
+    }
+};
 
     /**
      * ==================================================
