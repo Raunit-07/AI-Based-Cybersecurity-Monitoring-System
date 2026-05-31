@@ -38,8 +38,9 @@ const ThreatTimeline = () => {
                     response?.success
                 ) {
                     const timelineData =
-                        response?.data
-                            ?.timeline || [];
+                        Array.isArray(response?.data)
+                            ? response?.data
+                            : response?.data?.timeline || [];
 
                     setTimeline(
                         Array.isArray(
