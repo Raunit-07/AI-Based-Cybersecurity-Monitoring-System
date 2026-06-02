@@ -29,7 +29,6 @@ npm-debug.log*
 
 # ML model artifacts
 *.pkl
-*.joblib
 *.h5
 
 # Cookies
