@@ -9,6 +9,8 @@ export const initLogWorker = (io) => {
     "log-processing",
 
     async (job) => {
+      console.log("WORKER JOB DATA:");
+      console.dir(job.data, { depth: null });
       await processLog(
         job.data,
 

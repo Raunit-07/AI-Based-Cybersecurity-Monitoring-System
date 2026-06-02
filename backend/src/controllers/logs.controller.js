@@ -2,7 +2,6 @@ import logsService from "../services/logs.service.js";
 import apiResponse from "../utils/apiResponse.js";
 import catchAsync from "../utils/catchAsync.js";
 import logger from "../utils/logger.js";
-import { getLogQueue } from "../jobs/logQueue.js";
 
 // const logQueue = getLogQueue();
 
@@ -93,8 +92,13 @@ const createLog = catchAsync(async (req, res) => {
     return apiResponse(res, 400, false, null, "No valid logs to process");
   }
 
-  const logQueue = getLogQueue();
-  await logQueue.addBulk(jobs);
+  for (const job of jobs) {
+    await logsService.processLog(
+      job.data,
+      req.app.get("io"),
+      userId
+    );
+  }
 
   logger.info(`${jobs.length} logs queued`, {
     queued: jobs.length,

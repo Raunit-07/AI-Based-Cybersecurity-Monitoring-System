@@ -1,9 +1,9 @@
 import Log from "../models/log.model.js";
+import { analyzeLog } from "../threat/threatEngine.js";
 import logger from "../utils/logger.js";
 import { createAlert } from "./alerts.service.js";
 import { detectThreat } from "./mlClient.js";
 import { emitTrafficUpdate } from "./realtime.service.js";
-import { analyzeLog } from "../threat/threatEngine.js";
 
 /**
  * ============================================
@@ -99,7 +99,11 @@ const processLog = async (logData, io, userId) => {
     }
 
     if (!userId) {
-      throw new Error("Missing user ID");
+      logger.error("processLog: Missing user ID — log dropped", {
+        ip: logData.ip,
+        endpoint: logData.endpoint,
+      });
+      return null;
     }
 
     const cleanData = sanitizeLogData(logData);
@@ -168,11 +172,11 @@ const processLog = async (logData, io, userId) => {
      * ============================================
      */
     const isAnomaly =
-      prediction?.is_anomaly === true ||
-      anomalyScore >= 0.7 ||
-      cleanData.requests > 800 ||
-      cleanData.failedLogins > 10 ||
-      (threatResult && threatResult.is_anomaly === true);
+    prediction?.is_anomaly === true ||
+    anomalyScore >= 0.7 ||
+    cleanData.requests > 800 ||
+    cleanData.failedLogins > 10 ||
+    (threatResult && threatResult.is_anomaly === true);
 
     /**
      * ============================================

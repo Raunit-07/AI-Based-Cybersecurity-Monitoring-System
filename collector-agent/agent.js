@@ -105,6 +105,11 @@ logger.info(
 logger.info(
   `📂 Watching log file: ${config.logFilePath}`
 );
+console.log("WATCH FILE =", config.logFilePath);
+console.log(
+  "FILE EXISTS =",
+  fs.existsSync(config.logFilePath)
+);
 
 /**
  * ==================================================
@@ -237,117 +242,180 @@ const watcher =
     }
   );
 
+watcher.on("ready", () => {
+  console.log("WATCHER READY");
+});
+
+watcher.on("all", (event, path) => {
+  console.log("EVENT:", event, path);
+});
+/**
 /**
  * ==================================================
- * FILE CHANGE EVENT
+ * FILE EVENTS
+ * ==================================================
+ */
+watcher.on("all", (event, path) => {
+  try {
+    console.log(`🔥 EVENT: ${event} -> ${path}`);
+
+    /**
+     * Only process file updates
+     */
+    if (
+      event !== "change" &&
+      event !== "add"
+    ) {
+      return;
+    }
+
+    /**
+     * Ensure file exists
+     */
+    if (
+      !fs.existsSync(
+        config.logFilePath
+      )
+    ) {
+      logger.warn(
+        "⚠️ Log file does not exist"
+      );
+      return;
+    }
+
+    /**
+     * Read latest file content
+     */
+    const content =
+      fs.readFileSync(
+        config.logFilePath,
+        "utf8"
+      );
+
+    /**
+     * Split lines
+     */
+    const lines = content
+      .split(/\r?\n/)
+      .map((line) =>
+        line.trim()
+      )
+      .filter(Boolean);
+
+    if (!lines.length) {
+      logger.warn(
+        "⚠️ Log file is empty"
+      );
+      return;
+    }
+
+    /**
+     * Only valid nginx lines
+     */
+    const validLines =
+      lines.filter(
+        (line) =>
+          line.includes(
+            "HTTP/"
+          )
+      );
+
+    if (
+      !validLines.length
+    ) {
+      logger.warn(
+        "⚠️ No valid HTTP log lines found"
+      );
+      return;
+    }
+
+    /**
+     * Latest log line
+     */
+    const lastLine =
+      validLines[
+        validLines.length - 1
+      ];
+
+    console.log(
+      "LAST LINE:",
+      lastLine
+    );
+
+    /**
+     * Prevent duplicates
+     */
+    if (
+      lastLine ===
+      lastProcessedLine
+    ) {
+      console.log(
+        "⏭ Duplicate line skipped"
+      );
+      return;
+    }
+
+    lastProcessedLine =
+      lastLine;
+
+    /**
+     * Parse log
+     */
+    const parsed =
+      parseNginxLog(
+        lastLine
+      );
+
+    console.log(
+      "PARSED:",
+      parsed
+    );
+
+    if (!parsed) {
+      logger.warn(
+        "⚠️ Failed to parse log line"
+      );
+      return;
+    }
+
+    /**
+     * Add to batch
+     */
+    logBuffer.push(
+      parsed
+    );
+
+    console.log(
+      `📦 Buffer Size: ${logBuffer.length}`
+    );
+
+    logger.info(
+      `📡 Log captured from ${parsed.ip}`
+    );
+  } catch (error) {
+    logger.error(
+      `❌ Watcher error: ${error.message}`
+    );
+  }
+});
+
+/**
+ * ==================================================
+ * RAW DEBUG EVENTS
  * ==================================================
  */
 watcher.on(
-  "change",
-  (path) => {
-    try {
-      console.log(
-        `🔥 FILE CHANGED: ${path}`
-      );
-
-      /**
-       * Read latest file content
-       */
-      const content =
-        fs.readFileSync(
-          config.logFilePath,
-          "utf8"
-        );
-
-      /**
-       * Split lines
-       */
-      const lines = content
-        .split("\n")
-        .map((line) =>
-          line.trim()
-        )
-        .filter(Boolean);
-
-      if (!lines.length) {
-        return;
-      }
-
-      /**
-       * ONLY VALID HTTP LINES
-       */
-      const validLines =
-        lines.filter(
-          (line) =>
-            line.includes(
-              "HTTP/"
-            )
-        );
-
-      if (
-        !validLines.length
-      ) {
-        logger.warn(
-          "⚠️ No valid HTTP log lines found"
-        );
-
-        return;
-      }
-
-      /**
-       * LAST COMPLETE LINE
-       */
-      const lastLine =
-        validLines[
-        validLines.length - 1
-        ];
-
-      /**
-       * Prevent duplicate processing
-       */
-      if (
-        lastLine ===
-        lastProcessedLine
-      ) {
-        return;
-      }
-
-      lastProcessedLine =
-        lastLine;
-
-      /**
-       * Parse nginx log
-       */
-      const parsed =
-        parseNginxLog(
-          lastLine
-        );
-
-      console.log(parsed);
-
-      if (!parsed) {
-        logger.warn(
-          "⚠️ Failed to parse log line"
-        );
-
-        return;
-      }
-
-      /**
-       * Push to batch buffer
-       */
-      logBuffer.push(
-        parsed
-      );
-
-      logger.info(
-        `📡 Log captured from ${parsed.ip}`
-      );
-    } catch (error) {
-      logger.error(
-        `❌ Watcher error: ${error.message}`
-      );
-    }
+  "raw",
+  (
+    event,
+    path,
+    details
+  ) => {
+    console.log(
+      "RAW EVENT:",
+      event,
+      path
+    );
   }
 );
 

@@ -89,18 +89,21 @@ export const registerDevice = async (token) => {
 
     return response.data;
   } catch (error) {
-    const errorMsg = error.response?.data?.message || error.message;
+  console.log("========== REGISTER ERROR ==========");
+  console.log("MESSAGE:", error.message);
+  console.log("CODE:", error.code);
+  console.log("STATUS:", error.response?.status);
+  console.log("DATA:", error.response?.data);
+  console.log("=====================================");
 
-    logger.error(`❌ Device registration failed: ${errorMsg}`);
+  const errorMsg =
+    error.response?.data?.message ||
+    error.message;
 
-    if (error.response?.data) {
-      console.log("\n========== REGISTER ERROR ==========");
-      console.dir(error.response.data, { depth: null });
-      console.log("====================================\n");
-    }
+  logger.error(`❌ Device registration failed: ${errorMsg}`);
 
-    throw new Error(errorMsg);
-  }
+  throw error;
+}
 };
 
 /**

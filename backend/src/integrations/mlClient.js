@@ -19,7 +19,7 @@ const analyzeThreat = async (logData) => {
     };
 
     const response = await axios.post(mlUrl, payload, {
-      timeout: 5000,
+      timeout: 15000,
       headers: { 'Content-Type': 'application/json' }
     });
 
