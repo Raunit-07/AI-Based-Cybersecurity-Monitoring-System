@@ -1,17 +1,16 @@
-import React from "react";
-import { TrafficChart } from "../components/TrafficChart";
 import { AlertsList } from "../components/AlertsList";
 import { SuspiciousIPsTable } from "../components/SuspiciousIPsTable";
+import { TrafficChart } from "../components/TrafficChart";
 
-import { fetchAlerts, fetchDevices } from "../services/api";
-import { useSuspiciousIPs } from "../hooks/useThreatData";
-import { useLiveTraffic } from "../hooks/useLiveTraffic";
-import ThreatTimeline from "../components/ThreatTimeline";
-import SuspiciousIPs from "../components/SuspiciousIPs";
 import { useQuery } from "@tanstack/react-query";
+import SuspiciousIPs from "../components/SuspiciousIPs";
+import ThreatTimeline from "../components/ThreatTimeline";
 import { useAuth } from "../hooks/useAuth";
+import { useLiveTraffic } from "../hooks/useLiveTraffic";
+import { useSuspiciousIPs } from "../hooks/useThreatData";
+import { fetchAlerts, fetchDevices } from "../services/api";
 
-import { Shield, AlertTriangle, Activity, Database, Laptop } from "lucide-react";
+import { Activity, AlertTriangle, Database, Laptop, Shield } from "lucide-react";
 
 // ================= MAIN COMPONENT =================
 export const Dashboard = () => {
@@ -129,6 +128,7 @@ export const Dashboard = () => {
           <div className="lg:col-span-2">
             <TrafficChart data={trafficData || []} />
           </div>
+          {/* console.log("Traffic Data:", trafficData); */}
 
           {/* ALERTS */}
           <div className="h-[400px] overflow-hidden">
