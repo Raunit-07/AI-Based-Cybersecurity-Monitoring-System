@@ -1,8 +1,4 @@
-import {
-  useState,
-  useEffect,
-  useRef,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { getSocket } from "../services/socket";
 
@@ -21,14 +17,11 @@ import { useAuth } from "./useAuth";
  * - cache synchronization
  */
 export const useLiveTraffic = () => {
-  const [trafficData, setTrafficData] =
-    useState([]);
+  const [trafficData, setTrafficData] = useState([]);
 
-  const [isConnected, setIsConnected] =
-    useState(false);
+  const [isConnected, setIsConnected] = useState(false);
 
-  const queryClient =
-    useQueryClient();
+  const queryClient = useQueryClient();
 
   const socketRef = useRef(null);
 
@@ -45,9 +38,7 @@ export const useLiveTraffic = () => {
     const socket = getSocket();
 
     if (!socket) {
-      console.error(
-        "❌ Socket instance unavailable"
-      );
+      console.error("❌ Socket instance unavailable");
 
       return;
     }
@@ -62,10 +53,7 @@ export const useLiveTraffic = () => {
     const handleConnect = () => {
       setIsConnected(true);
 
-      console.log(
-        "✅ Socket connected:",
-        socket.id
-      );
+      console.log("✅ Socket connected:", socket.id);
     };
 
     /**
@@ -73,15 +61,10 @@ export const useLiveTraffic = () => {
      * SOCKET DISCONNECT
      * =====================================
      */
-    const handleDisconnect = (
-      reason
-    ) => {
+    const handleDisconnect = (reason) => {
       setIsConnected(false);
 
-      console.warn(
-        "⚠️ Socket disconnected:",
-        reason
-      );
+      console.warn("⚠️ Socket disconnected:", reason);
     };
 
     /**
@@ -89,77 +72,47 @@ export const useLiveTraffic = () => {
      * TRAFFIC UPDATE
      * =====================================
      */
-    const handleTrafficUpdate = (
-      data
-    ) => {
+    const handleTrafficUpdate = (data) => {
       try {
-        if (
-          !data ||
-          typeof data !== "object"
-        ) {
+        if (!data || typeof data !== "object") {
           return;
         }
+        console.log("🚦 TRAFFIC EVENT RECEIVED", data);
 
         // =====================================
         // MULTI-TENANT SAFETY
         // =====================================
-        if (
-          data.user &&
-          data.user !== user.id
-        ) {
+        if (data.user && data.user !== user.id) {
           return;
         }
 
         const trafficPoint = {
-          time:
-            data.time ||
-            new Date().toISOString(),
+          time: data.time || new Date().toISOString(),
 
-          requests: Math.max(
-            0,
-            Number(data.requests) || 0
-          ),
+          requests: Math.max(0, Number(data.requests) || 0),
 
-          blocked: Math.max(
-            0,
-            Number(data.blocked) || 0
-          ),
+          blocked: Math.max(0, Number(data.blocked) || 0),
 
-          ip:
-            data.ip || "unknown",
+          ip: data.ip || "unknown",
 
-          attackType:
-            data.attackType ||
-            "Normal",
+          attackType: data.attackType || "Normal",
         };
 
         // =====================================
         // LOCAL STATE
         // =====================================
         setTrafficData((prev) => {
-          return [
-            ...prev.slice(-19),
-            trafficPoint,
-          ];
+          return [...prev.slice(-19), trafficPoint];
         });
 
         // =====================================
         // CACHE UPDATE
         // =====================================
-        queryClient.setQueryData(
-          ["traffic", user.id],
-          (oldData = []) => {
-            return [
-              ...oldData.slice(-19),
-              trafficPoint,
-            ];
-          }
-        );
+        queryClient.setQueryData(["traffic", user.id], (oldData = []) => {
+          return [...oldData.slice(-19), trafficPoint];
+        });
       } catch (error) {
-        console.error(
-          "❌ Traffic handler error:",
-          error.message
-        );
+        console.error("❌ Traffic handler error:", error.message);
       }
     };
 
@@ -168,87 +121,49 @@ export const useLiveTraffic = () => {
      * NEW ALERT
      * =====================================
      */
-    const handleNewAlert = (
-      alert
-    ) => {
+    const handleNewAlert = (alert) => {
       try {
-        if (
-          !alert ||
-          typeof alert !==
-          "object"
-        ) {
+        if (!alert || typeof alert !== "object") {
           return;
         }
 
         // =====================================
         // MULTI-TENANT SAFETY
         // =====================================
-        if (
-          alert.user &&
-          alert.user !== user.id
-        ) {
+        if (alert.user && alert.user !== user.id) {
           return;
         }
 
         const formattedAlert = {
-          id:
-            alert.id ||
-            crypto.randomUUID(),
+          id: alert.id || crypto.randomUUID(),
 
-          type:
-            alert.attackType ||
-            "Unknown Threat",
+          type: alert.attackType || "Unknown Threat",
 
-          severity:
-            alert.severity ||
-            "medium",
+          severity: alert.severity || "medium",
 
-          source:
-            alert.ip ||
-            "Unknown",
+          source: alert.ip || "Unknown",
 
-          time:
-            alert.timestamp ||
-            new Date().toISOString(),
+          time: alert.timestamp || new Date().toISOString(),
 
-          status:
-            alert.status ||
-            "active",
+          status: alert.status || "active",
 
-          anomalyScore:
-            alert.anomalyScore || 0,
+          anomalyScore: alert.anomalyScore || 0,
 
-          meta:
-            alert.meta || {},
+          meta: alert.meta || {},
         };
 
         // =====================================
         // DEDUPLICATION
         // =====================================
-        queryClient.setQueryData(
-          ["alerts", user.id],
-          (oldData = []) => {
-            const exists =
-              oldData.some(
-                (a) =>
-                  a.id ===
-                  formattedAlert.id
-              );
+        queryClient.setQueryData(["alerts", user.id], (oldData = []) => {
+          const exists = oldData.some((a) => a.id === formattedAlert.id);
 
-            if (exists)
-              return oldData;
+          if (exists) return oldData;
 
-            return [
-              formattedAlert,
-              ...oldData,
-            ].slice(0, 50);
-          }
-        );
+          return [formattedAlert, ...oldData].slice(0, 50);
+        });
       } catch (error) {
-        console.error(
-          "❌ Alert handler error:",
-          error.message
-        );
+        console.error("❌ Alert handler error:", error.message);
       }
     };
 
@@ -257,25 +172,13 @@ export const useLiveTraffic = () => {
      * REGISTER EVENTS
      * =====================================
      */
-    socket.on(
-      "connect",
-      handleConnect
-    );
+    socket.on("connect", handleConnect);
 
-    socket.on(
-      "disconnect",
-      handleDisconnect
-    );
+    socket.on("disconnect", handleDisconnect);
 
-    socket.on(
-      "traffic_update",
-      handleTrafficUpdate
-    );
+    socket.on("traffic_update", handleTrafficUpdate);
 
-    socket.on(
-      "new_alert",
-      handleNewAlert
-    );
+    socket.on("new_alert", handleNewAlert);
 
     /**
      * =====================================
@@ -292,28 +195,15 @@ export const useLiveTraffic = () => {
      * =====================================
      */
     return () => {
-      if (!socketRef.current)
-        return;
+      if (!socketRef.current) return;
 
-      socketRef.current.off(
-        "connect",
-        handleConnect
-      );
+      socketRef.current.off("connect", handleConnect);
 
-      socketRef.current.off(
-        "disconnect",
-        handleDisconnect
-      );
+      socketRef.current.off("disconnect", handleDisconnect);
 
-      socketRef.current.off(
-        "traffic_update",
-        handleTrafficUpdate
-      );
+      socketRef.current.off("traffic_update", handleTrafficUpdate);
 
-      socketRef.current.off(
-        "new_alert",
-        handleNewAlert
-      );
+      socketRef.current.off("new_alert", handleNewAlert);
     };
   }, [queryClient, user?.id]);
 
